@@ -5,21 +5,22 @@ from pydantic import HttpUrl
 from functools import wraps
 from httpx import Response
 
+def request_resp(method: str = "GET"):
+    def outter_wrapped(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapped(self, url: HttpUrl, additional_headers: Dict[str, str] = {}, **kwargs):
+            headers = {}
+            headers.update(additional_headers)
+            headers.update(self.HEADERS)
 
-def get_resp(func: Callable) -> Callable:
-    @wraps(func)
-    async def wrapped(self, url: HttpUrl, additional_headers: Dict[str, str] = {}, **kwargs):
-        headers = {}
-        headers.update(additional_headers)
-        headers.update(self.HEADERS)
+            resp = await self.client.request(method, url, headers=headers)
 
-        resp = await self.client.get(url, headers=headers)
-
-        if resp.status_code == 200:
-            return await func(self, resp, **kwargs)
-        else:
-            raise RuntimeError(f"response status code: {resp.status_code}")
-    return wrapped
+            if resp.status_code == 200:
+                return await func(self, resp, **kwargs)
+            else:
+                raise RuntimeError(f"response status code: {resp.status_code}")
+        return wrapped
+    return outter_wrapped
 
 
 class DownloadService:
@@ -33,7 +34,7 @@ class DownloadService:
         limits = Limits(max_connections=max_connections, max_keepalive_connections=max_keepalive_connections)
         self.client = AsyncClient(limits=limits, timeout=5, verify=False)
     
-    @get_resp
+    @request_resp("GET")
     async def get_json(self, resp: Response) -> Union[List, Dict]:
         """Make a get request and return with BeautifulSoup"""
         return resp.json()
