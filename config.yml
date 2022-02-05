@@ -1,0 +1,2 @@
+db:
+  url: "postgresql://username:pw@host:port/db_name"

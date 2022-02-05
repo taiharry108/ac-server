@@ -1,0 +1,8 @@
+sqlalchemy
+fastapi
+pytest
+dependency-injector
+uvicorn[standard]
+fastapi
+alembic
+psycopg2-binary
