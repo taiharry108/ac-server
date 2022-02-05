@@ -35,7 +35,7 @@ def create_app() -> FastAPI:
     )
 
     app.container = container
-    app.include_router(user.router)
+    app.include_router(user.router, prefix="/user")
     return app
 
 

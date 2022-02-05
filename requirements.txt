@@ -6,3 +6,6 @@ uvicorn[standard]
 fastapi
 alembic
 psycopg2-binary
+httpx[http2]
+pytest-asyncio
+requests
