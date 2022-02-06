@@ -1,5 +1,6 @@
 
 from typing import Callable, Dict, Union, List
+from bs4 import BeautifulSoup
 from httpx import AsyncClient, Limits
 from pydantic import HttpUrl
 from functools import wraps
@@ -36,7 +37,23 @@ class DownloadService:
     
     @request_resp("GET")
     async def get_json(self, resp: Response) -> Union[List, Dict]:
-        """Make a get request and return with BeautifulSoup"""
+        """Make a get request and return with json"""
         return resp.json()
+    
+    @request_resp("GET")
+    async def get_bytes(self, resp: Response) -> bytes:
+        """Make a get request and return with bytes"""
+        print(resp.content)
+        return resp.content
+
+    @request_resp("GET")
+    async def get_byte_soup(self, resp: Response) -> BeautifulSoup:
+        """Make a get request and return with BeautifulSoup"""
+        return BeautifulSoup(resp.content, features="html.parser")
+
+    @request_resp("GET")
+    async def get_soup(self, resp: Response) -> BeautifulSoup:
+        """Make a get request and return with BeautifulSoup"""
+        return BeautifulSoup(resp.text, features="html.parser")
 
     

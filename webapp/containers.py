@@ -14,7 +14,7 @@ class Container(containers.DeclarativeContainer):
 
     config = providers.Configuration(yaml_files=["config.yml"])
 
-    db = providers.Singleton(Database, db_url=config.db.url)
+    # db = providers.Singleton(Database, db_url=config.db.url)
 
     download_service = providers.Singleton(
         DownloadService,

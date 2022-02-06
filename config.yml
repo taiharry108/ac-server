@@ -1,2 +1,5 @@
 db:
   url: "postgresql://username:pw@host:port/db_name"
+
+cors:
+  allow_origins: ["localhost:8001"]
