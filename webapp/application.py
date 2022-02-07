@@ -4,6 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.logger import logger as fastapi_logger
 
+from webapp.routers import main
+
 from .containers import Container
 from .routers import user
 
@@ -39,6 +41,7 @@ def create_app() -> FastAPI:
     )
     setattr(app, 'container', container)
     app.include_router(user.router, prefix="/user")
+    app.include_router(main.router, prefix="/api")
     return app
 
 
