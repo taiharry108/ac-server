@@ -1,7 +1,6 @@
 
-import asyncio
+from logging import getLogger
 from pathlib import Path
-from turtle import down
 from typing import Callable, Dict, Union, List
 import uuid
 from bs4 import BeautifulSoup
@@ -9,6 +8,13 @@ from httpx import AsyncClient, Limits
 from pydantic import HttpUrl
 from functools import wraps
 from httpx import Response
+
+from dependency_injector import providers
+
+from webapp.services.store_services.abstract_store_service import AbstractStoreService
+
+
+logger = getLogger(__name__)
 
 
 def request_resp(method: str = "GET"):
@@ -32,12 +38,12 @@ def request_resp(method: str = "GET"):
 class DownloadService:
     """Handle all the http requests"""
 
-    def __init__(self, max_connections: int, max_keepalive_connections: int, headers: Dict[str, str], download_dir: str) -> None:
+    def __init__(self, max_connections: int, max_keepalive_connections: int, headers: Dict[str, str], download_dir: str, store_service_factory: providers.FactoryAggregate, store: str) -> None:
         limits = Limits(max_connections=max_connections,
                         max_keepalive_connections=max_keepalive_connections)
         self.client = AsyncClient(limits=limits, timeout=5, verify=False)
         self.headers = headers
-        self.download_dir = Path(download_dir)
+        self.store_service: AbstractStoreService = store_service_factory(store)
 
     @request_resp("GET")
     async def get_json(self, resp: Response) -> Union[List, Dict]:
@@ -47,7 +53,6 @@ class DownloadService:
     @request_resp("GET")
     async def get_bytes(self, resp: Response) -> bytes:
         """Make a get request and return with bytes"""
-        print(resp.content)
         return resp.content
 
     @request_resp("GET")
@@ -60,18 +65,12 @@ class DownloadService:
         """Make a get request and return with BeautifulSoup"""
         return BeautifulSoup(resp.text, features="html.parser")
 
-    def setup_download_path(self, download_path: Path = None) -> Path:
-        dir_path = self.download_dir
-        if download_path is not None:
-            dir_path /= download_path
-        dir_path.mkdir(exist_ok=True, parents=True)
-        return dir_path
-
-    def setup_file_path(self, content_type: str, dir_path: Path, filename: str = None) -> Path:
+    def generate_file_path(self, content_type: str, dir_path: Path, filename: str = None) -> Path:
         if filename is None:
             filename = uuid.uuid4()
-        file_path = dir_path / \
-            f'{filename}.{content_type.split("/")[-1]}'
+        file_path = Path("./") if dir_path is None else Path(dir_path)
+        file_path /= f'{filename}.{content_type.split("/")[-1]}'
+                
         return file_path
 
     @request_resp("GET")
@@ -82,10 +81,9 @@ class DownloadService:
         if not content_type.startswith('image'):
             raise RuntimeError("Response is not an image")
 
-        dir_path = self.setup_download_path(download_path)
-        file_path = self.setup_file_path(content_type, dir_path, filename)
-        with open(file_path, 'wb') as img_f:
-            img_f.write(b)
-        result = {"pic_path": str(file_path)}
+        file_path = self.generate_file_path(content_type, download_path, filename)        
+
+        result_path = self.store_service.persist_file(str(file_path), b)
+        result = {"pic_path": result_path}
         result.update(kwargs)
         return result

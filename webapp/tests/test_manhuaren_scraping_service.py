@@ -9,8 +9,6 @@ import pytest
 
 from logging import getLogger
 
-from webapp.services.async_service import AsyncService
-
 logger = getLogger(__name__)
 
 
@@ -21,19 +19,13 @@ def scraping_service(scraping_service_factory: providers.Factory[AbstractMangaSi
 
 
 @pytest.fixture
-@inject
-def async_service(async_service: AsyncService = Provide[Container.async_service]):
-    return async_service
+def manga(m_data) -> Manga:
+    return Manga(name=m_data["name"], url=m_data["url"])
 
 
 @pytest.fixture
-def manga() -> Manga:
-    return Manga(name="火影忍者", url="https://www.manhuaren.com/manhua-huoyingrenzhe-naruto/")
-
-
-@pytest.fixture
-def chapter() -> Chapter:
-    return Chapter(title="第187话", page_url='https://www.manhuaren.com/m1199828/')
+def chapter(c_data) -> Chapter:
+    return Chapter(title=c_data["title"], page_url=c_data["page_url"])
 
 
 @pytest.mark.parametrize("search_txt,name,url_ending", [
@@ -50,10 +42,12 @@ async def test_search_manga(scraping_service: AbstractMangaSiteScrapingService, 
 
     for manga in manga_list:
         if manga.name == name:
-            print(manga)
             assert manga.url.endswith(url_ending)
 
 
+@pytest.mark.parametrize("m_data", [
+    {"name": "火影忍者", "url": "https://www.manhuaren.com/manhua-huoyingrenzhe-naruto/"}
+])
 async def test_get_index_page(scraping_service: AbstractMangaSiteScrapingService, manga: Manga):
     manga = await scraping_service.get_index_page(manga)
     assert manga.name == "火影忍者"
@@ -71,6 +65,9 @@ async def test_get_index_page(scraping_service: AbstractMangaSiteScrapingService
     logger.info(manga.chapters[MangaIndexTypeEnum.CHAPTER][0])
 
 
+@pytest.mark.parametrize("c_data", [
+    {"title": "第187话", "page_url": 'https://www.manhuaren.com/m1199828/'}
+])
 async def test_get_page_urls(scraping_service: AbstractMangaSiteScrapingService, chapter: Chapter):
     img_urls = await scraping_service.get_page_urls(chapter)
     assert len(img_urls) == 18
@@ -80,8 +77,11 @@ async def test_get_page_urls(scraping_service: AbstractMangaSiteScrapingService,
         assert ".jpg" in img_url
 
 
-async def test_async_service(scraping_service: AbstractMangaSiteScrapingService, manga: Manga, chapter: Chapter):    
+@pytest.mark.parametrize("m_data,c_data", [
+    ({"name": "海盗战记", "url": "https://www.manhuaren.com/manhua-haidaozhanji/"},
+     {"title": "第186话", "page_url": 'https://www.manhuaren.com/m1199827/'})
+])
+async def test_download_chapter(scraping_service: AbstractMangaSiteScrapingService, manga: Manga, chapter: Chapter):
     async for item in scraping_service.download_chapter(manga, chapter):
-        print(item)
-
-    
+        assert "pic_path" in item
+        assert "idx" in item

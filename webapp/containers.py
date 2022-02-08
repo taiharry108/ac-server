@@ -7,6 +7,7 @@ from webapp.services.async_service import AsyncService
 from webapp.services.download_service import DownloadService
 from webapp.services.manhuagui_scraping_service import ManhuaguiScrapingService
 from webapp.services.manhuaren_scraping_service import ManhuarenScrapingService
+from webapp.services.store_services.fs_store_service import FSStoreService
 
 
 
@@ -25,12 +26,21 @@ class Container(containers.DeclarativeContainer):
 
     async_service = providers.Singleton(AsyncService, num_workers=5, delay=0.3)
 
+    store_service_factory = providers.FactoryAggregate(
+        fs=providers.Singleton(
+            FSStoreService,
+            base_dir=config.store_service.base_dir
+        )
+    )
+
     download_service = providers.Singleton(
         DownloadService,
         max_connections=config.download_service.max_connections,
         max_keepalive_connections=config.download_service.max_keepalive_connections,
         headers=config.download_service.headers,
-        download_dir=config.download_service.download_dir
+        download_dir=config.download_service.download_dir,
+        store_service_factory=store_service_factory,
+        store=config.download_service.store
     )
 
     scraping_service_factory = providers.FactoryAggregate(
@@ -39,4 +49,5 @@ class Container(containers.DeclarativeContainer):
         manhuagui=providers.Singleton(
             ManhuaguiScrapingService, download_service, async_service)
     )
+
 
