@@ -38,7 +38,7 @@ def request_resp(method: str = "GET"):
 class DownloadService:
     """Handle all the http requests"""
 
-    def __init__(self, max_connections: int, max_keepalive_connections: int, headers: Dict[str, str], download_dir: str, store_service_factory: providers.FactoryAggregate, store: str) -> None:
+    def __init__(self, max_connections: int, max_keepalive_connections: int, headers: Dict[str, str], store_service_factory: providers.FactoryAggregate, store: str) -> None:
         limits = Limits(max_connections=max_connections,
                         max_keepalive_connections=max_keepalive_connections)
         self.client = AsyncClient(limits=limits, timeout=5, verify=False)

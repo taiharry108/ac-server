@@ -5,7 +5,6 @@ import pytest
 from webapp.services.download_service import DownloadService
 from webapp.containers import Container
 from logging import getLogger
-from ..application import app
 
 
 logger = getLogger(__name__)

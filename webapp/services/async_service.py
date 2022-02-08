@@ -9,7 +9,7 @@ class AsyncService:
     num_workers: int
     delay: float
 
-    async def _producer(self, in_q: asyncio.Queue, out_q: asyncio.Queue, async_func: AsyncFunctionDef,**kwargs):
+    async def _producer(self, in_q: asyncio.Queue, out_q: asyncio.Queue, async_func: AsyncFunctionDef, **kwargs):
         while True:
             item = await in_q.get()
 

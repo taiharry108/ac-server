@@ -1,24 +1,21 @@
 """Containers module."""
 
-from pathlib import Path
 from dependency_injector import containers, providers
 from webapp.services.async_service import AsyncService
+from webapp.services.crud_service import CRUDService
 
 from webapp.services.download_service import DownloadService
 from webapp.services.manhuagui_scraping_service import ManhuaguiScrapingService
 from webapp.services.manhuaren_scraping_service import ManhuarenScrapingService
 from webapp.services.store_services.fs_store_service import FSStoreService
-
-
-
-from .database import Database
+from webapp.services.database import Database
 
 
 class Container(containers.DeclarativeContainer):
 
     wiring_config = containers.WiringConfiguration(
         modules=[],
-        packages=[".tests", ".routers"])
+        packages=["webapp.routers", "webapp.tests"])
 
     config = providers.Configuration(yaml_files=["config.yml"])
 
@@ -38,7 +35,6 @@ class Container(containers.DeclarativeContainer):
         max_connections=config.download_service.max_connections,
         max_keepalive_connections=config.download_service.max_keepalive_connections,
         headers=config.download_service.headers,
-        download_dir=config.download_service.download_dir,
         store_service_factory=store_service_factory,
         store=config.download_service.store
     )
@@ -50,4 +46,7 @@ class Container(containers.DeclarativeContainer):
             ManhuaguiScrapingService, download_service, async_service)
     )
 
-
+    crud_service = providers.Singleton(
+        CRUDService,
+        database=db
+    )
