@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 Base = declarative_base()
 
 
+
 class Database:
 
     def __init__(self, db_url: str) -> None:
@@ -27,6 +28,7 @@ class Database:
         )
 
     def create_database(self) -> None:
+        print("creating database")
         Base.metadata.create_all(self._engine)
 
     @contextmanager
