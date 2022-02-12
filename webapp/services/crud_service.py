@@ -95,6 +95,7 @@ class CRUDService:
         return True
 
     def bulk_create_objs_with_unique_key(self, orm_obj_type: Type[T], items: List[Dict], unique_key: str) -> bool:
+        """Bulk create jobs, but check if a value exsists for a unique key"""
         db_items = self.get_items_by_attrs(
             orm_obj_type, unique_key, [item[unique_key] for item in items])
 
