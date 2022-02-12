@@ -17,11 +17,13 @@ def rearrange_items(og_items, shuffled_items, unique_key, og_is_value=False):
     else:
         idx_dict = {getattr(item, unique_key): idx for idx,
                     item in enumerate(og_items)}
-        
+
     new_list = [None for _ in enumerate(og_items)]
 
     for item in shuffled_items:
         new_list[idx_dict[getattr(item, unique_key)]] = item
+    
+    new_list = [item for item in new_list if item is not None]
 
     return new_list
 
@@ -55,11 +57,25 @@ class CRUDService:
         return self.get_item_by_attr(orm_obj_type, attr_name, attr_value).id
 
     def get_items_by_attrs(self, orm_obj_type: Type[T], attr_name: str, attr_values: List[Any]) -> List[T]:
-        with self.database.session() as session:
+        with self.database.session() as session:            
             db_items = session.query(orm_obj_type).filter(
                 getattr(orm_obj_type, attr_name).in_(attr_values)).all()
-            
+
             db_items = rearrange_items(attr_values, db_items, attr_name, True)
+            logger.info(len(db_items))
+            return db_items
+
+    def get_items_by_same_attr(self, orm_obj_type: Type[T], attr_name: str, attr_value: Any, sort_key: str = None) -> List[T]:
+        with self.database.session() as session:
+            db_filter = session.query(orm_obj_type).filter(
+                getattr(orm_obj_type, attr_name) == attr_value)
+
+            if sort_key is not None:
+                db_items = db_filter.order_by(
+                    getattr(orm_obj_type, sort_key)).all()
+            else:
+                db_items = db_filter.all()
+
             return db_items
 
     def create_obj(self, orm_obj_type: Type[T], **kwargs) -> T:
@@ -81,6 +97,7 @@ class CRUDService:
     def bulk_create_objs_with_unique_key(self, orm_obj_type: Type[T], items: List[Dict], unique_key: str) -> bool:
         db_items = self.get_items_by_attrs(
             orm_obj_type, unique_key, [item[unique_key] for item in items])
+
         existing_unique_keys = set(getattr(item, unique_key)
                                    for item in db_items)
 
