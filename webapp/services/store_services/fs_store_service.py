@@ -39,7 +39,7 @@ class FSStoreService(AbstractStoreService):
         absolute_path.parent.mkdir(exist_ok=True, parents=True)
         with open(absolute_path, "wb") as f:
             f.write(data)
-        return str(absolute_path)
+        return str(path)
 
     def stat_file(self, path: str) -> Dict[str, str]:
         """Return stat of a file"""
