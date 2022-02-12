@@ -2,16 +2,18 @@ from logging import getLogger
 from typing import List
 from fastapi import APIRouter, Depends
 from fastapi import Response, status
+from fastapi.responses import StreamingResponse
 from webapp.containers import Container
 
 from dependency_injector.wiring import inject, Provider, Provide
 from dependency_injector import providers
+from webapp.models.chapter import Chapter
 from webapp.models.manga import Manga, MangaBase
 from webapp.models.manga_site_enum import MangaSiteEnum
 from webapp.services.abstract_manga_site_scraping_service import AbstractMangaSiteScrapingService
 from webapp.services.crud_service import CRUDService
 
-from webapp.models.db_models import Manga as DBManga, MangaSite as DBMangaSite, Chapter as DBChapter
+from webapp.models.db_models import Manga as DBManga, MangaSite as DBMangaSite, Chapter as DBChapter, Page as DBPage
 
 router = APIRouter()
 
@@ -42,6 +44,7 @@ async def search_manga(site: MangaSiteEnum,
     all_urls = [manga.url for manga in mangas]
     mangas = [{"name": manga.name, "url": str(manga.url), "manga_site_id": manga_site_id}
               for manga in mangas]
+    logger.info(mangas)
     crud_service.bulk_create_objs_with_unique_key(DBManga, mangas, "url")
 
     return crud_service.get_items_by_attrs(DBManga, "url", all_urls)
@@ -87,3 +90,44 @@ async def get_index(response: Response,
 
     return manga
 
+
+@router.get('/chapter/{site}/{chapter_id}')
+@inject
+async def get_chapter(response: Response,
+                      site: MangaSiteEnum,
+                      chapter_id: int,
+                      scraping_service_factory: providers.FactoryAggregate = Depends(
+                          Provider[Container.scraping_service_factory]),
+                      crud_service: CRUDService = Depends(Provide[Container.crud_service])):
+
+    scraping_service: AbstractMangaSiteScrapingService = scraping_service_factory(
+        site)
+
+    db_chapter = crud_service.get_item_by_id(DBChapter, chapter_id)
+
+    if not db_chapter:
+        response.status_code = status.HTTP_406_NOT_ACCEPTABLE
+        return {"success": "failed"}
+    pages = crud_service.get_items_by_same_attr(
+        DBPage, "chapter_id", chapter_id, "idx")
+
+    db_manga = crud_service.get_item_by_id(DBManga, db_chapter.manga_id)
+
+    if not db_manga:
+        response.status_code = status.HTTP_406_NOT_ACCEPTABLE
+        return {"success": "failed"}
+
+    if pages:
+        return pages
+
+    manga = MangaBase.from_orm(db_manga)
+    chapter = Chapter.from_orm(db_chapter)
+
+    result = []
+    async for img_dict in scraping_service.download_chapter(manga, chapter):
+        result.append(img_dict)
+
+    ordered_result = [None for _ in result]
+    for img_dict in result:
+        ordered_result[img_dict["idx"]] = img_dict
+    return ordered_result
