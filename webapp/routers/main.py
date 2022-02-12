@@ -1,5 +1,6 @@
+import json
 from logging import getLogger
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 from fastapi import APIRouter, Depends
 from fastapi import Response, status
 from fastapi.responses import StreamingResponse
@@ -68,6 +69,34 @@ def get_chapter_precheck(response: Response, chapter_id: int, crud_service: CRUD
     return db_chapter, db_manga
 
 
+def create_stream_response(pages: List[DBPage] = None,
+                           scraping_service: Union[AbstractMangaSiteScrapingService, None] = None,
+                           manga: Union[MangaBase, None] = None,
+                           chapter: Union[Chapter, None] = None,
+                           crud_service: Union[CRUDService, None] = None,
+                           chapter_id: Union[int, None] = None):
+    async def img_gen():
+        if pages:
+            for db_page in pages:
+                page = {
+                    "pic_path": db_page.pic_path,
+                    "idx": db_page.idx,
+                    "total": db_page.total
+                }
+                yield f'data: {json.dumps(page)}\n\n'
+        else:
+            result = []
+            async for img_dict in scraping_service.download_chapter(manga, chapter):
+                logger.info(img_dict)
+                yield f'data: {json.dumps(img_dict)}\n\n'
+                result.append(img_dict)
+            logger.info("going to save to database")
+
+            save_pages(crud_service, result, chapter_id)
+
+    return StreamingResponse(img_gen(), media_type="text/event-stream")
+
+
 @router.get("/search/{site}/{search_keyword}", response_model=List[MangaBase])
 @inject
 async def search_manga(site: MangaSiteEnum,
@@ -133,16 +162,16 @@ async def get_chapter(response: Response,
                       scraping_service_factory: providers.FactoryAggregate = Depends(
                           Provider[Container.scraping_service_factory]),
                       crud_service: CRUDService = Depends(Provide[Container.crud_service])):
-
     pages = crud_service.get_items_by_same_attr(
         DBPage, "chapter_id", chapter_id, "idx")
 
     if pages:
         logger.info("found pages in db")
-        return pages
+        return create_stream_response(pages, None, None, None, None, None)
 
     scraping_service: AbstractMangaSiteScrapingService = scraping_service_factory(
         site)
+    logger.info("get_chapter_precheck")
 
     db_chapter, db_manga = get_chapter_precheck(
         response, chapter_id, crud_service)
@@ -152,14 +181,6 @@ async def get_chapter(response: Response,
 
     manga = MangaBase.from_orm(db_manga)
     chapter = Chapter.from_orm(db_chapter)
+    logger.info("creating response")
 
-    result = []
-    async for img_dict in scraping_service.download_chapter(manga, chapter):
-        result.append(img_dict)
-
-    save_pages(crud_service, result, chapter_id)
-
-    all_urls = [item["pic_path"] for item in result]
-    result = crud_service.get_items_by_attrs(DBPage, "pic_path", all_urls)
-
-    return result
+    return create_stream_response(pages, scraping_service, manga, chapter, crud_service, chapter_id)

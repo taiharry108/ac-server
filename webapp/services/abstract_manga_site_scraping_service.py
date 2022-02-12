@@ -52,7 +52,8 @@ class AbstractMangaSiteScrapingService(metaclass=abc.ABCMeta):
         work_list = [{
             "url": img_url,
             "filename": self.create_img_name(manga, chapter, idx),
-            "idx": idx
+            "idx": idx,
+            "total": len(img_urls)
         } for idx, img_url in enumerate(img_urls)]
 
         async for result_dict in self.async_service.work(
