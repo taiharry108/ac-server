@@ -30,6 +30,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True)
     is_active = Column(Boolean, default=True)
+    hashed_password = Column(String)
 
     fav_mangas = relationship("Manga", secondary=favorite_table)
     history_mangas = relationship("History", back_populates="user")

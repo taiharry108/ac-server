@@ -59,7 +59,7 @@ async def test_get_index_page(scraping_service: AbstractMangaSiteScrapingService
     assert chap.page_url.endswith("m5196/")
     assert chap.title == '第1卷'
 
-    assert manga.thum_img.startswith("images")
+    assert manga.thum_img.startswith("thum_img")
     assert manga.thum_img.endswith("jpeg")
 
     logger.info(manga.chapters[MangaIndexTypeEnum.CHAPTER][0])

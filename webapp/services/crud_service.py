@@ -80,11 +80,11 @@ class CRUDService:
 
     def create_obj(self, orm_obj_type: Type[T], **kwargs) -> T:
         with self.database.session() as session:
-            db_manga = orm_obj_type(**kwargs)
-            session.add(db_manga)
+            db_item = orm_obj_type(**kwargs)
+            session.add(db_item)
             session.commit()
-            session.refresh(db_manga)
-            return db_manga
+            session.refresh(db_item)
+            return db_item
 
     def bulk_create_objs(self, orm_obj_type: Type[T], items: List[Dict]) -> bool:
         logger.info(f"Going to bulk create {len(items)} items")

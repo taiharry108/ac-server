@@ -93,6 +93,7 @@ def create_stream_response(pages: List[DBPage] = None,
             logger.info("going to save to database")
 
             save_pages(crud_service, result, chapter_id)
+        yield 'data: {}\n\n'
 
     return StreamingResponse(img_gen(), media_type="text/event-stream")
 
