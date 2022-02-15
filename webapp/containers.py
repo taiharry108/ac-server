@@ -13,6 +13,9 @@ from webapp.services.database import Database
 
 from passlib.context import CryptContext
 
+from webapp.services.user_service import UserService
+
+
 class Container(containers.DeclarativeContainer):
 
     wiring_config = containers.WiringConfiguration(
@@ -61,3 +64,7 @@ class Container(containers.DeclarativeContainer):
         crud_service=crud_service,
         pwd_context=CryptContext(schemes=["bcrypt"], deprecated="auto")
     )
+
+    user_service = providers.Singleton(UserService,
+                                       crud_service=crud_service,
+                                       security_service=security_service)

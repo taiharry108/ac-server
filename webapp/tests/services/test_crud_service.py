@@ -1,14 +1,15 @@
-from webapp.models.db_models import MangaSite, Manga
+from webapp.models.db_models import MangaSite, Manga, User, History
 from webapp.models.manga_site_enum import MangaSiteEnum
 from webapp.services.crud_service import CRUDService
 from webapp.services.database import Database
 from webapp.containers import Container
 import pytest
-from pydantic import HttpUrl
 from dependency_injector.wiring import Provide, inject
-from dependency_injector import containers, providers
+from dependency_injector import providers
 from logging import getLogger
 from logging import config
+
+from webapp.tests.utils import delete_all
 config.fileConfig('logging.conf', disable_existing_loggers=False)
 
 
@@ -35,8 +36,7 @@ def crud_service(database: Database, crud_service: CRUDService = Provide[Contain
 @pytest.fixture(autouse=True, scope="module")
 async def run_before_and_after_tests(database: Database):
     with database.session() as session:
-        session.query(Manga).delete()
-        session.query(MangaSite).delete()
+        delete_all(session)
         db_manga_site = MangaSite(
             name='manhuaren',
             url='https://www.manhuaren.com/')
@@ -52,7 +52,7 @@ def manga_site_id(crud_service: CRUDService):
     return crud_service.get_id_by_attr(MangaSite, "name", site.value)
 
 
-async def test_create_manga(crud_service: CRUDService, manga_site_id: int):
+async def test_create_manga(crud_service: CRUDService, manga_site_id: int):    
     manga_name = "Test Manga"
     manga_url = "https://example.com"
 

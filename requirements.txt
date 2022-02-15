@@ -10,3 +10,6 @@ httpx[http2]
 pytest-asyncio
 requests
 beautifulsoup4
+python-multipart
+python-jose[cryptography]
+passlib[bcrypt]

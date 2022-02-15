@@ -12,6 +12,7 @@ from webapp.services.crud_service import CRUDService
 
 from logging import getLogger
 
+
 logger = getLogger(__name__)
 
 
@@ -24,26 +25,24 @@ class SecurityService:
     pwd_context: CryptContext
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        return self.pwd_context.verify(plain_password, hashed_password)
+        try:
+            return self.pwd_context.verify(plain_password, hashed_password)
+        except ValueError:
+            return False
 
     def hash_password(self, password: str) -> bool:
         return self.pwd_context.hash(password)
 
-    def get_user(self, username: str) -> Optional[UserInDB]:
-        db_user = self.crud_service.get_item_by_attr(DBUser, "email", username)
-        if db_user is None:
-            return None
-        return UserInDB(username=db_user.email,
-                        is_active=db_user.is_active,
-                        hashed_password=db_user.hashed_password)
-
-    def authenticate_user(self, username: str, password: str) -> Union[bool, UserInDB]:
-        user = self.get_user(username)
-        if not user:
+    def authenticate_user(self, db_user: DBUser, password: str) -> Union[bool, UserInDB]:        
+        if not db_user:
+            logger.info("user not exists")
             return False
-        if not self.verify_password(password, user.hashed_password):
+        
+        if not self.verify_password(
+                password, db_user.hashed_password):
+            logger.info("wrong password")
             return False
-        return user
+        return db_user
 
     def create_access_token(self, data: dict, expires_delta: Optional[timedelta] = None):
         to_encode = data.copy()
@@ -58,11 +57,3 @@ class SecurityService:
 
     def decode_access_token(self, token: str):
         return jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
-
-    def create_user(self, username: str, password: str) -> Optional[DBUser]:
-        if self.get_user(username):            
-            return None
-        hashed_password = self.hash_password(password)
-        db_user = self.crud_service.create_obj(
-            DBUser, email=username, hashed_password=hashed_password)
-        return db_user

@@ -10,6 +10,9 @@ from jose import JWTError, jwt
 
 from logging import getLogger
 from logging import config
+from webapp.services.user_service import UserService
+
+from webapp.tests.utils import delete_all
 config.fileConfig('logging.conf', disable_existing_loggers=False)
 logger = getLogger(__name__)
 
@@ -24,26 +27,34 @@ def database():
     return db
 
 
-@pytest.fixture(autouse=True, scope="module")
-async def run_before_and_after_tests(database: Database):
-    with database.session() as session:
-        session.query(User).delete()
-        session.commit()
-    yield
+@pytest.fixture(scope="module")
+@inject
+def user_service(user_service: providers.Singleton[UserService] = Provide[Container.user_service]) -> UserService:
+    return user_service
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
+def username() -> str: return "test_user1"
+
+
+@pytest.fixture(scope="module")
+def password() -> str: return "123456"
+
+
+@pytest.fixture(scope="module")
 @inject
 def security_service(security_service: providers.Singleton[SecurityService] = Provide[Container.security_service]) -> SecurityService:
     return security_service
 
 
-@pytest.fixture
-def username() -> str: return "test_user1"
-
-
-@pytest.fixture
-def password() -> str: return "123456"
+@pytest.fixture(autouse=True, scope="module")
+async def run_before_and_after_tests(database: Database,
+                                     user_service: UserService,
+                                     username: str, password: str):
+    with database.session() as session:
+        delete_all(session)
+        user_service.create_user(username, password)
+    yield
 
 
 async def test_verify_password(security_service: SecurityService, password: str):
@@ -54,31 +65,26 @@ async def test_verify_password(security_service: SecurityService, password: str)
     assert security_service.verify_password(password, hashed_password2)
 
 
-async def test_create_user(security_service: SecurityService, username: str, password: str):
-    db_user = security_service.create_user(username, password)
-    assert db_user.email == username
-    assert security_service.verify_password(password, db_user.hashed_password)
-
-async def test_create_user_twice(security_service: SecurityService, username: str, password: str):
-    security_service.create_user(username, password)
-    db_user2 = security_service.create_user(username, password)
-    assert db_user2 is None
-# assert db_user.email == username
-    # assert security_service.verify_password(password, db_user.hashed_password)
+async def test_verify_password_failed(security_service: SecurityService, password: str):
+    assert not security_service.verify_password(password, "12345")
 
 
-async def test_get_user(security_service: SecurityService, username: str):
-    db_user = security_service.get_user(username)
-    if db_user is None:
-        assert False
-
-    assert db_user.username == username
+async def test_authenticate_user_not_exists(user_service: UserService, security_service: SecurityService):
+    db_user = user_service.get_user("abc")
+    user = security_service.authenticate_user(db_user, "123456")
+    assert user == False
 
 
-async def test_authenticate_user(security_service: SecurityService, username: str, password):
-    user = security_service.authenticate_user(username, password)
-    assert user
-    assert user.username == username
+async def test_authenticate_user_wrong_pw(user_service: UserService, security_service: SecurityService, username: str):
+    db_user = user_service.get_user(username)
+    user = security_service.authenticate_user(db_user, "123a45")
+    assert user == False
+
+
+async def test_authenticate_user(user_service: UserService, security_service: SecurityService, username: str, password: str):
+    db_user = user_service.get_user(username)
+    user = security_service.authenticate_user(db_user, password)
+    assert user == db_user
 
 
 async def test_create_access_token(security_service: SecurityService, username: str):
@@ -91,6 +97,6 @@ async def test_create_access_token(security_service: SecurityService, username: 
 
 async def test_decode_access_token(security_service: SecurityService, username: str):
     data = {"sub": username}
-    token = security_service.create_access_token(data)    
+    token = security_service.create_access_token(data)
     decoded_data = security_service.decode_access_token(token)
     assert decoded_data["sub"] == data["sub"]
