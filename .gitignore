@@ -142,3 +142,4 @@ cython_debug/
 *.db
 
 static/
+alembic*
