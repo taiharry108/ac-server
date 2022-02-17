@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Optional
 from webapp.models.user import UserInDB
 from webapp.services.crud_service import CRUDService
-from webapp.models.db_models import History as DBHistory, User as DBUser, Manga as DBManga
+from webapp.models.db_models import History as DBHistory, User as DBUser, Manga as DBManga, Chapter as DBChapter
 from webapp.services.secruity_service import SecurityService
 from logging import getLogger
 
@@ -37,6 +37,20 @@ class UserService:
                 session.commit()
             return True
 
+        return self.crud_service.item_obj_iteraction(None, DBUser, DBManga, user_id, manga_id, work)
+    
+    def update_history(self, chap_id: int, user_id: int):
+        manga_id = self.crud_service.get_item_by_id(DBChapter, chap_id).manga_id
+        def work(session, db_user, db_manga):
+            db_hist: DBHistory = session.query(DBHistory).filter(
+                DBHistory.manga_id == manga_id, DBHistory.user_id == user_id).first()
+            if db_hist is not None:
+                db_hist.chaper_id = chap_id
+                session.commit()
+                return True
+            else:
+                return False
+        
         return self.crud_service.item_obj_iteraction(None, DBUser, DBManga, user_id, manga_id, work)
 
     def add_history(self, manga_id: int, user_id: int) -> bool:

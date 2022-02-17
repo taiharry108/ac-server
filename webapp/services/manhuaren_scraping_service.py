@@ -134,7 +134,7 @@ class ManhuarenScrapingService(AbstractMangaSiteScrapingService):
         thum_img_path = await self.download_service.download_img(meta_dict['thum_img'], download_path=Path("thum_img"), filename=self.create_img_name(manga))
         meta_dict['thum_img'] = thum_img_path['pic_path']
 
-        manga.set_meta_data(meta_dict)
+        manga.set_meta_data(meta_dict, False)
         manga.retreived_idx_page()
         return manga
 

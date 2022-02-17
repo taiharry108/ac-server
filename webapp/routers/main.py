@@ -1,3 +1,4 @@
+import asyncio
 import json
 from logging import getLogger
 from typing import Dict, List, Tuple, Union
@@ -133,7 +134,6 @@ async def get_index(response: Response,
 
     scraping_service: AbstractMangaSiteScrapingService = scraping_service_factory(
         site)
-    # check if manga exsits
     db_manga = crud_service.get_item_by_id(DBManga, manga_id)
 
     if db_manga is None:
@@ -151,6 +151,14 @@ async def get_index(response: Response,
 
         manga.chapters[index_type] = crud_service.get_items_by_attrs(
             DBChapter, "page_url", page_urls)
+    
+    meta_data = {
+        "last_update": manga.last_update,
+        "finished": manga.finished,
+        "thum_img": manga.thum_img
+    }
+    
+    crud_service.update_object(DBManga, manga_id, **meta_data)
 
     return manga
 

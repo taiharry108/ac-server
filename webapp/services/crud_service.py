@@ -21,7 +21,7 @@ def add_session(func):
     return wrapped
 
 
-def rearrange_items(og_items, shuffled_items, unique_key, og_is_value=False):
+def rearrange_items(og_items, shuffled_items, unique_key, og_is_value=False, keep_none=False):
     if og_is_value:
         idx_dict = {item: idx for idx,
                     item in enumerate(og_items)}
@@ -34,7 +34,8 @@ def rearrange_items(og_items, shuffled_items, unique_key, og_is_value=False):
     for item in shuffled_items:
         new_list[idx_dict[getattr(item, unique_key)]] = item
 
-    new_list = [item for item in new_list if item is not None]
+    if not keep_none:
+        new_list = [item for item in new_list if item is not None]
 
     return new_list
 
@@ -43,25 +44,24 @@ def rearrange_items(og_items, shuffled_items, unique_key, og_is_value=False):
 class CRUDService:
     database: Database
 
-    def get_item_by_id(self, orm_obj_type: Type[T], id: int) -> T:
-        """Get item by id, return None if not exists"""
-        query_result = self.get_items_by_ids(orm_obj_type, [id])
-        if query_result:
-            return query_result[0]
-        return None
-    
+    @add_session
+    def get_item_by_id(self, session: Session, orm_obj_type: Type[T], id: int) -> T:
+        """Get item by id, return None if not exists"""        
+        query_result = session.query(orm_obj_type).get(id)
+        if not query_result:
+            return None
+        return query_result
+
     @add_session
     def get_attr_of_item_by_id(self, session: Session, orm_obj_type: Type[T], id: int, attr_name: str):
         return getattr(session.query(orm_obj_type).get(id), attr_name)
 
     @add_session
-    def get_items_by_ids(self, session: Session, orm_obj_type: Type[T], ids: List[int]) -> List[T]:
+    def get_items_by_ids(self, session: Session, orm_obj_type: Type[T], ids: List[int], keep_none=False) -> List[T]:
         """Get item by id, return empty list if not exists"""
         result = session.query(orm_obj_type).filter(
             orm_obj_type.id.in_(ids)).all()
-        if not result:
-            return []
-        return rearrange_items(ids, result, "id", True)
+        return rearrange_items(ids, result, "id", True, keep_none=keep_none)
 
     def get_item_by_attr(self, orm_obj_type: Type[T], attr_name: str, attr_value: Any) -> T:
         return self.get_item_by_attrs(orm_obj_type, **{attr_name: attr_value})
@@ -83,7 +83,6 @@ class CRUDService:
             getattr(orm_obj_type, attr_name).in_(attr_values)).all()
 
         db_items = rearrange_items(attr_values, db_items, attr_name, True)
-        logger.info(len(db_items))
         return db_items
 
     @add_session
@@ -131,10 +130,10 @@ class CRUDService:
                 return True
             return False
         return self.item_obj_iteraction(session, orm_obj_type, orm_item_type, obj_id, item_id, append_item)
-    
+
     @add_session
     def remove_item_from_obj(self, session: Session, orm_obj_type: Type[T], orm_item_type: Type[T],
-                        obj_id: int, item_id: int, attr_name: str) -> bool:
+                             obj_id: int, item_id: int, attr_name: str) -> bool:
         def remove_item(session, db_obj, db_item):
             if db_item in getattr(db_obj, attr_name):
                 getattr(db_obj, attr_name).remove(db_item)
@@ -171,6 +170,18 @@ class CRUDService:
         items = [item for item in items if not item[unique_key]
                  in existing_unique_keys]
         return self.bulk_create_objs(orm_obj_type, items)
+
+    @add_session
+    def update_object(self, session: Session, orm_obj_type: Type[T], id: int, **kwargs) -> bool:
+        db_item = session.query(orm_obj_type).get(id)
+        if not db_item:
+            return False
+        for key, value in kwargs.items():
+            if not hasattr(db_item, key):
+                return False
+            setattr(db_item, key, value)
+        session.commit()
+        return True
 
     @add_session
     def test_add_session(self, session, a):

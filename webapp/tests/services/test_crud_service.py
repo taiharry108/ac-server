@@ -45,6 +45,14 @@ async def run_before_and_after_tests(database: Database):
         session.refresh(db_manga_site)
     yield
 
+@pytest.fixture
+def manga_name() -> str:
+    return "Test Manga"
+
+@pytest.fixture
+def manga_url() -> str:
+    return "https://example.com"
+
 
 @pytest.fixture
 def manga_site_id(crud_service: CRUDService):
@@ -52,10 +60,7 @@ def manga_site_id(crud_service: CRUDService):
     return crud_service.get_id_by_attr(MangaSite, "name", site.value)
 
 
-async def test_create_manga(crud_service: CRUDService, manga_site_id: int):    
-    manga_name = "Test Manga"
-    manga_url = "https://example.com"
-
+async def test_create_manga(crud_service: CRUDService, manga_site_id: int, manga_name: str, manga_url: str):
     db_manga = crud_service.create_obj(Manga, name=manga_name,
                                        url=manga_url, manga_site_id=manga_site_id)
 
@@ -91,3 +96,22 @@ async def test_get_items_by_attrs(crud_service: CRUDService):
     urls = [f"https://example.com/{i}" for i in range(4)]
     db_mangas = crud_service.get_items_by_attrs(Manga, "url", urls)
     assert len(db_mangas) == 4
+
+
+async def test_update_values(crud_service: CRUDService, manga_name: str, manga_url: str):
+    db_manga = crud_service.get_item_by_attr(Manga, "url", manga_url)
+    manga_id = db_manga.id
+    thum_img = "test.png"
+    result = crud_service.update_object(Manga, manga_id, thum_img=thum_img)
+    assert result
+
+    db_manga = crud_service.get_item_by_id(Manga, manga_id)
+    assert db_manga.thum_img == thum_img
+
+
+async def test_update_values_failed_wrong_attr(crud_service: CRUDService, manga_name: str, manga_url: str):
+    db_manga = crud_service.get_item_by_attr(Manga, "url", manga_url)
+    manga_id = db_manga.id
+    thum_img = "test.png"
+    result = crud_service.update_object(Manga, manga_id, foo=thum_img)
+    assert not result

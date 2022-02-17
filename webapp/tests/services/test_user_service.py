@@ -2,10 +2,11 @@ import pytest
 from dependency_injector.wiring import inject, Provide
 from dependency_injector import providers
 from webapp.containers import Container
+from webapp.models.manga_index_type_enum import MangaIndexTypeEnum
 from webapp.models.user import User
 from webapp.models.manga import Manga
 
-from webapp.models.db_models import User as DBUser, Manga as DBManga, History as DBHistory
+from webapp.models.db_models import User as DBUser, Manga as DBManga, History as DBHistory, Chapter as DBChapter
 from webapp.services.crud_service import CRUDService
 
 from webapp.services.database import Database
@@ -120,7 +121,8 @@ async def test_add_history(user_service: UserService, crud_service: CRUDService,
     user_id = db_user.id
     assert user_service.add_history(manga_id, user_id)
 
-    db_history = crud_service.get_item_by_attrs(DBHistory, manga_id=manga_id, user_id=user_id)
+    db_history = crud_service.get_item_by_attrs(
+        DBHistory, manga_id=manga_id, user_id=user_id)
     assert db_history.manga_id == manga_id
     assert db_history.user_id == user_id
     assert db_history.last_added
@@ -169,11 +171,24 @@ async def test_remove_fav(crud_service: CRUDService, user_service: UserService, 
 async def test_remove_history(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int):
     db_user = crud_service.get_item_by_attr(DBUser, "email", username)
     user_id = db_user.id
-    logger.info(user_id)
-    logger.info(manga_id)
     user_service.remove_history(manga_id, user_id)
 
     history_mangas = user_service.get_history(user_id)
     filtered_mangas = [
         manga for manga in history_mangas if manga.id == manga_id]
     assert len(filtered_mangas) == 0
+
+
+async def test_update_history(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int):
+    db_chapter = crud_service.create_obj(DBChapter, title="Test title", page_url="https://example.com",
+                            manga_id=manga_id, type=MangaIndexTypeEnum.CHAPTER.value)
+    db_user = crud_service.get_item_by_attr(DBUser, "email", username)    
+    user_id = db_user.id
+
+    assert user_service.add_history(manga_id, user_id)
+    assert user_service.update_history(db_chapter.id, user_id)
+    db_history = crud_service.get_item_by_attrs(DBHistory, manga_id=manga_id, chaper_id=db_chapter.id, user_id=user_id)
+    assert db_history.chaper_id == db_chapter.id
+
+
+
