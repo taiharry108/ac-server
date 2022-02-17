@@ -41,7 +41,8 @@ class Container(containers.DeclarativeContainer):
         max_keepalive_connections=config.download_service.max_keepalive_connections,
         headers=config.download_service.headers,
         store_service_factory=store_service_factory,
-        store=config.download_service.store
+        store=config.download_service.store,
+        proxy=config.download_service.proxy
     )
 
     scraping_service_factory = providers.FactoryAggregate(

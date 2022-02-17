@@ -1,8 +1,7 @@
-import asyncio
 import json
 from logging import getLogger
 from typing import Dict, List, Tuple, Union
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi import Response, status
 from fastapi.responses import StreamingResponse
 from webapp.containers import Container
@@ -125,8 +124,7 @@ async def search_manga(site: MangaSiteEnum,
 
 @router.get('/index/{site}/{manga_id}')
 @inject
-async def get_index(response: Response,
-                    site: MangaSiteEnum,
+async def get_index(site: MangaSiteEnum,
                     manga_id: int,
                     scraping_service_factory: providers.FactoryAggregate = Depends(
                         Provider[Container.scraping_service_factory]),
@@ -137,8 +135,10 @@ async def get_index(response: Response,
     db_manga = crud_service.get_item_by_id(DBManga, manga_id)
 
     if db_manga is None:
-        response.status_code = status.HTTP_406_NOT_ACCEPTABLE
-        return {"success": "failed"}
+        raise HTTPException(
+            status_code=status.HTTP_406_NOT_ACCEPTABLE,
+            detail="Manga does not exist"
+        )
 
     manga = Manga(name=db_manga.name, url=db_manga.url, id=db_manga.id)
 
@@ -186,7 +186,10 @@ async def get_chapter(response: Response,
         response, chapter_id, crud_service)
 
     if not db_chapter or not db_manga:
-        return {"success": "failed"}
+        raise HTTPException(
+            status_code=status.HTTP_406_NOT_ACCEPTABLE,
+            detail="Manga or Chapter does not exist"
+        )
 
     manga = MangaBase.from_orm(db_manga)
     chapter = Chapter.from_orm(db_chapter)

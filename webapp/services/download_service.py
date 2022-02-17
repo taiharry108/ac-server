@@ -38,10 +38,16 @@ def request_resp(method: str = "GET"):
 class DownloadService:
     """Handle all the http requests"""
 
-    def __init__(self, max_connections: int, max_keepalive_connections: int, headers: Dict[str, str], store_service_factory: providers.FactoryAggregate, store: str) -> None:
+    def __init__(self, max_connections: int, max_keepalive_connections: int,
+                 headers: Dict[str, str], store_service_factory: providers.FactoryAggregate,
+                 store: str, proxy: Dict[str, str]) -> None:
+                 
         limits = Limits(max_connections=max_connections,
                         max_keepalive_connections=max_keepalive_connections)
-        self.client = AsyncClient(limits=limits, timeout=5, verify=False)
+        logger.info(proxy)
+        proxies = f"socks5://{proxy['username']}:{proxy['password']}@{proxy['server']}:{proxy['port']}"
+        self.client = AsyncClient(
+            limits=limits, timeout=5, verify=False, proxies=proxies)
         self.headers = headers
         self.store_service: AbstractStoreService = store_service_factory(store)
 
@@ -70,7 +76,7 @@ class DownloadService:
             filename = uuid.uuid4()
         file_path = Path("./") if dir_path is None else Path(dir_path)
         file_path /= f'{filename}.{content_type.split("/")[-1]}'
-                
+
         return file_path
 
     @request_resp("GET")
@@ -81,7 +87,8 @@ class DownloadService:
         if not content_type.startswith('image'):
             raise RuntimeError("Response is not an image")
 
-        file_path = self.generate_file_path(content_type, download_path, filename)        
+        file_path = self.generate_file_path(
+            content_type, download_path, filename)
 
         result_path = self.store_service.persist_file(str(file_path), b)
         result = {"pic_path": result_path}
