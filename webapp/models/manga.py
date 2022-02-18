@@ -1,4 +1,3 @@
-from webapp.models.manga_site import MangaSite
 from .chapter import Chapter
 from typing import Dict, List, Optional
 from .manga_index_type_enum import MangaIndexTypeEnum

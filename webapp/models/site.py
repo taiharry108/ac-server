@@ -1,6 +1,6 @@
 from pydantic import BaseModel, HttpUrl
 
-class MangaSite(BaseModel):
+class Site(BaseModel):
     id: int
     name: str
     url: HttpUrl

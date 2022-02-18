@@ -1,6 +1,7 @@
 """Containers module."""
 
 from dependency_injector import containers, providers
+from webapp.services.anime1_scraping_service import Anime1ScrapingService
 from webapp.services.async_service import AsyncService
 from webapp.services.crud_service import CRUDService
 
@@ -49,7 +50,10 @@ class Container(containers.DeclarativeContainer):
         manhuaren=providers.Singleton(
             ManhuarenScrapingService, download_service, async_service),
         manhuagui=providers.Singleton(
-            ManhuaguiScrapingService, download_service, async_service)
+            ManhuaguiScrapingService, download_service, async_service),
+        anime1=providers.Singleton(
+            Anime1ScrapingService, download_service, async_service
+        )        
     )
 
     crud_service = providers.Singleton(

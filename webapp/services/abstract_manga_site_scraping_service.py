@@ -7,7 +7,7 @@ from typing import Generator, List
 from webapp.models.chapter import Chapter
 from webapp.models.manga import Manga
 
-from webapp.models.manga_site import MangaSite
+from webapp.models.site import Site
 from webapp.services.async_service import AsyncService
 
 from .download_service import DownloadService
@@ -18,7 +18,7 @@ import hashlib
 class AbstractMangaSiteScrapingService(metaclass=abc.ABCMeta):
     download_service: DownloadService
     async_service: AsyncService
-    site: MangaSite
+    site: Site
 
     @abc.abstractmethod
     async def search_manga(self, keyword: str) -> List[Manga]:

@@ -9,7 +9,7 @@ from webapp.models.chapter import Chapter
 from webapp.models.manga import Manga
 from webapp.models.manga_index_type_enum import MangaIndexTypeEnum
 
-from webapp.models.manga_site import MangaSite
+from webapp.models.site import Site
 
 from webapp.services.abstract_manga_site_scraping_service import AbstractMangaSiteScrapingService
 from webapp.services.utils import convert_url
@@ -66,7 +66,7 @@ def decode(p, a: int, c: int, k, d):
 
 @dataclasses.dataclass
 class ManhuarenScrapingService(AbstractMangaSiteScrapingService):
-    site: MangaSite = MangaSite(
+    site: Site = Site(
         id=0, name="manhuaren", url="https://www.manhuaren.com/")
 
     async def search_manga(self, keyword: str) -> List[Manga]:

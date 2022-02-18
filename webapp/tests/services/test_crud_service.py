@@ -82,7 +82,7 @@ async def test_bulk_create_mangas(crud_service: CRUDService, manga_site_id: int)
 
     crud_service.bulk_create_objs(Manga, mangas)
 
-    db_mangas = crud_service.get_items_by_attrs(Manga, "url", urls)
+    db_mangas = crud_service.get_items_by_attr(Manga, "url", urls)
 
     assert len(db_mangas) == 15
     assert isinstance(db_mangas[0], Manga)
@@ -92,9 +92,9 @@ async def test_bulk_create_mangas(crud_service: CRUDService, manga_site_id: int)
         assert db_manga.manga_site_id == manga_site_id
 
 
-async def test_get_items_by_attrs(crud_service: CRUDService):
+async def test_get_items_by_attr(crud_service: CRUDService):
     urls = [f"https://example.com/{i}" for i in range(4)]
-    db_mangas = crud_service.get_items_by_attrs(Manga, "url", urls)
+    db_mangas = crud_service.get_items_by_attr(Manga, "url", urls)
     assert len(db_mangas) == 4
 
 

@@ -46,7 +46,7 @@ class CRUDService:
 
     @add_session
     def get_item_by_id(self, session: Session, orm_obj_type: Type[T], id: int) -> T:
-        """Get item by id, return None if not exists"""        
+        """Get item by id, return None if not exists"""
         query_result = session.query(orm_obj_type).get(id)
         if not query_result:
             return None
@@ -78,7 +78,7 @@ class CRUDService:
         return self.get_item_by_attr(orm_obj_type, attr_name, attr_value).id
 
     @add_session
-    def get_items_by_attrs(self, session: Session, orm_obj_type: Type[T], attr_name: str, attr_values: List[Any]) -> List[T]:
+    def get_items_by_attr(self, session: Session, orm_obj_type: Type[T], attr_name: str, attr_values: List[Any]) -> List[T]:
         db_items = session.query(orm_obj_type).filter(
             getattr(orm_obj_type, attr_name).in_(attr_values)).all()
 
@@ -160,7 +160,7 @@ class CRUDService:
 
     def bulk_create_objs_with_unique_key(self, orm_obj_type: Type[T], items: List[Dict], unique_key: str) -> bool:
         """Bulk create jobs, but check if a value exsists for a unique key"""
-        db_items = self.get_items_by_attrs(
+        db_items = self.get_items_by_attr(
             orm_obj_type, unique_key, [item[unique_key] for item in items])
 
         existing_unique_keys = set(getattr(item, unique_key)
@@ -182,8 +182,3 @@ class CRUDService:
             setattr(db_item, key, value)
         session.commit()
         return True
-
-    @add_session
-    def test_add_session(self, session, a):
-        logger.info(session)
-        logger.info(a)

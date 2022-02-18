@@ -4,14 +4,14 @@ from webapp.models.chapter import Chapter
 
 from webapp.models.manga import Manga
 
-from webapp.models.manga_site import MangaSite
+from webapp.models.site import Site
 
 from webapp.services.abstract_manga_site_scraping_service import AbstractMangaSiteScrapingService
 
 
 @dataclasses.dataclass
 class ManhuaguiScrapingService(AbstractMangaSiteScrapingService):
-    site: MangaSite = MangaSite(
+    site: Site = Site(
         id=0, name="manhuagui", url="https://www.manhuagui.com/")
     
     async def search_manga(self, keyword: str) -> List[Manga]:
