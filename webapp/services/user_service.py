@@ -27,6 +27,13 @@ class UserService:
 
     def get_history(self, user_id: int) -> List[DBHistory]:
         return self.crud_service.get_attr_of_item_by_id(DBUser, user_id, "history_mangas")
+    
+    def get_latest_chap(self, user_id: int, manga_id: int) -> Optional[DBChapter]:
+        db_history = self.crud_service.get_item_by_attrs(
+            DBHistory, manga_id=manga_id, user_id=user_id)
+        if db_history is None:
+            return None
+        return self.crud_service.get_item_by_id(DBChapter, db_history.chaper_id)
 
     def remove_history(self, manga_id: int, user_id: int) -> bool:
         def work(session, db_user, db_manga):

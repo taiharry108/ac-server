@@ -1,6 +1,7 @@
 import abc
 import dataclasses
 import hashlib
+from logging import getLogger
 from pathlib import Path
 from typing import Generator, List
 
@@ -12,7 +13,7 @@ from webapp.services.async_service import AsyncService
 
 from .download_service import DownloadService
 
-
+logger = getLogger(__name__)
 @dataclasses.dataclass
 class AbstractAnimeSiteScrapingService(metaclass=abc.ABCMeta):
     download_service: DownloadService
@@ -32,7 +33,7 @@ class AbstractAnimeSiteScrapingService(metaclass=abc.ABCMeta):
         """Get all the urls of a chaper, return a list of strings"""
     
     def create_vid_name(self, anime: Anime, episode: Episode) -> str:
-        name = self.name + anime.name
+        name = self.site.name + anime.name
         if episode:
             name += episode.title
 
@@ -41,7 +42,7 @@ class AbstractAnimeSiteScrapingService(metaclass=abc.ABCMeta):
     
     async def download_episode(self, anime: Anime, episode: Episode) -> Generator:
         video_url = await self.get_video_url(episode)
-        download_path = Path(self.name) / anime.name
+        download_path = Path(self.site.name) / anime.name
 
         work_list = [{
             "url": video_url,

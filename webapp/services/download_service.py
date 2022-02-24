@@ -27,7 +27,6 @@ def request_resp(method: str = "GET"):
                 "follow_redirects") if "follow_redirects" in kwargs else False
             data = kwargs.pop("data") if "data" in kwargs else {}
             
-
             resp = await self.client.request(method, url,
                                              headers=headers,
                                              follow_redirects=follow_redirects,
@@ -60,7 +59,7 @@ class DownloadService:
     
     @request_resp("POST")
     async def post_json(self, resp: Response) -> Union[List, Dict]:
-        """Make a get request and return with json"""
+        """Make a get request and return with json"""        
         return resp.json()
 
     @request_resp("GET")
@@ -114,6 +113,7 @@ class DownloadService:
         content_type = resp.headers['content-type']
         if not content_type.startswith('video'):
             raise RuntimeError("Response is not a video")
+        logger.info(f"{content_type=}")
 
         file_path = self.generate_file_path(
             content_type, download_path, filename)

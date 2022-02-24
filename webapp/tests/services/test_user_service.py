@@ -181,14 +181,26 @@ async def test_remove_history(crud_service: CRUDService, user_service: UserServi
 
 async def test_update_history(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int):
     db_chapter = crud_service.create_obj(DBChapter, title="Test title", page_url="https://example.com",
-                            manga_id=manga_id, type=MangaIndexTypeEnum.CHAPTER.value)
-    db_user = crud_service.get_item_by_attr(DBUser, "email", username)    
+                                         manga_id=manga_id, type=MangaIndexTypeEnum.CHAPTER.value)
+    db_user = crud_service.get_item_by_attr(DBUser, "email", username)
     user_id = db_user.id
 
     assert user_service.add_history(manga_id, user_id)
     assert user_service.update_history(db_chapter.id, user_id)
-    db_history = crud_service.get_item_by_attrs(DBHistory, manga_id=manga_id, chaper_id=db_chapter.id, user_id=user_id)
+    db_history = crud_service.get_item_by_attrs(
+        DBHistory, manga_id=manga_id, chaper_id=db_chapter.id, user_id=user_id)
     assert db_history.chaper_id == db_chapter.id
 
 
+async def test_get_latest_chap(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int):
+    db_chapter = crud_service.create_obj(DBChapter, title="Test title", page_url="https://example.com/1",
+                                         manga_id=manga_id, type=MangaIndexTypeEnum.CHAPTER.value)
+    db_user = crud_service.get_item_by_attr(DBUser, "email", username)
+    user_id = db_user.id
+    assert user_service.add_history(manga_id, user_id)
+    assert user_service.update_history(db_chapter.id, user_id)
 
+    latest_chapter = user_service.get_latest_chap(user_id, manga_id)
+    assert db_chapter.id == latest_chapter.id
+    assert latest_chapter.title == "Test title"
+    assert latest_chapter.page_url == "https://example.com/1"

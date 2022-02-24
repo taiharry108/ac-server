@@ -119,7 +119,7 @@ async def get_fav(current_user: User = Depends(get_current_user),
                       Provide[Container.user_service]),
                   fav_manga_ids: Set[int] = Depends(get_fav_manga_ids)):
     _, user_id = current_user
-    history = user_service.get_history(user_id)    
+    history = user_service.get_history(user_id)
     db_mangas = crud_service.get_items_by_ids(
         DBManga, [h.manga_id for h in history if h.manga_id in fav_manga_ids])
     db_chapters = crud_service.get_items_by_ids(
@@ -147,6 +147,25 @@ async def get_history(current_user: User = Depends(get_current_user),
     )
     return [create_manga_simple(manga, chapter, fav_manga_ids)
             for manga, chapter in zip(db_mangas, db_chapters)]
+
+
+@router.get("/latest_chap", response_model=Chapter)
+@inject
+async def get_latest_chap(manga_id: int,
+                          current_user: User = Depends(get_current_user),
+                          user_service: UserService = Depends(
+                              Provide[Container.user_service]),
+                          crud_service: CRUDService = Depends(
+                              Provide[Container.crud_service]),
+                          ):
+    _, user_id = current_user
+    db_chap = user_service.get_latest_chap(user_id, manga_id)
+    if not db_chap:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Chapter not found"
+        )
+    return db_chap
 
 
 @router.post("/add_fav")

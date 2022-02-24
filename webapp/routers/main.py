@@ -9,6 +9,7 @@ from webapp.containers import Container
 from dependency_injector.wiring import inject, Provider, Provide
 from dependency_injector import providers
 from webapp.models.anime import Anime
+from webapp.models.episode import Episode
 from webapp.models.chapter import Chapter
 from webapp.models.manga import Manga, MangaBase
 from webapp.models.manga_index_type_enum import MangaIndexTypeEnum
@@ -17,18 +18,13 @@ from webapp.services.abstract_anime_site_scraping_service import AbstractAnimeSi
 from webapp.services.abstract_manga_site_scraping_service import AbstractMangaSiteScrapingService
 from webapp.services.crud_service import CRUDService
 
-from webapp.models.db_models import Episode, Manga as DBManga, MangaSite as DBMangaSite
+from webapp.models.db_models import Manga as DBManga, MangaSite as DBMangaSite
 from webapp.models.db_models import Chapter as DBChapter, Page as DBPage, Anime as DBAnime, Episode as DBEpisode
 
 router = APIRouter()
 
 
 logger = getLogger(__name__)
-
-
-def get_manga_site_id(site: MangaSiteEnum, crud_service: CRUDService) -> int:
-    return crud_service.get_id_by_attr(
-        DBMangaSite, "name", site.value)
 
 
 def save_chapters(crud_service: CRUDService, chapters: List[Chapter], manga_id: int, index_type: MangaIndexTypeEnum) -> bool:
@@ -51,9 +47,17 @@ def save_episodes(crud_service: CRUDService, episodes: List[Episode], anime_id: 
         "anime_id": anime_id,
         "manual_key": f"{anime_id}:{ep.title}"
     } for ep in episodes]
-    
+
     return crud_service.bulk_create_objs_with_unique_key(
-        DBEpisode, episodes, "manual_key")
+        DBEpisode, episodes, "manual_key", ["data"])
+
+
+async def update_episode(db_anime: DBAnime,
+                         scraping_service: AbstractAnimeSiteScrapingService,
+                         crud_service: CRUDService):
+    anime = Anime.from_orm(db_anime)
+    eps = await scraping_service.get_index_page(anime)
+    save_episodes(crud_service, eps, db_anime.id)
 
 
 def save_pages(crud_service: CRUDService, pages: List[Dict], chapter_id: int) -> bool:
@@ -69,19 +73,24 @@ def save_pages(crud_service: CRUDService, pages: List[Dict], chapter_id: int) ->
         DBPage, pages, "pic_path")
 
 
-def get_chapter_precheck(response: Response, chapter_id: int, crud_service: CRUDService) -> Tuple[DBChapter, DBManga]:
+def get_chapter_precheck(chapter_id: int, crud_service: CRUDService) -> Tuple[DBChapter, DBManga]:
     db_chapter = crud_service.get_item_by_id(DBChapter, chapter_id)
 
     if not db_chapter:
-        response.status_code = status.HTTP_406_NOT_ACCEPTABLE
         return None, None
 
     db_manga = crud_service.get_item_by_id(DBManga, db_chapter.manga_id)
-
-    if not db_manga:
-        response.status_code = status.HTTP_406_NOT_ACCEPTABLE
-
     return db_chapter, db_manga
+
+
+def get_episode_precheck(episode_id: int, crud_service: CRUDService) -> Tuple[DBChapter, DBManga]:
+    db_ep = crud_service.get_item_by_id(DBEpisode, episode_id)
+
+    if not db_ep:
+        return None, None
+
+    db_anime = crud_service.get_item_by_id(DBAnime, db_ep.anime_id)
+    return db_ep, db_anime
 
 
 def create_stream_response(pages: List[DBPage] = None,
@@ -165,10 +174,10 @@ async def search_manga(site: MangaSiteEnum,
 @router.get("/anime_index/{site}/{anime_id}")
 @inject
 async def get_anime_index(site: MangaSiteEnum,
-                    anime_id: int,
-                    scraping_service_factory: providers.FactoryAggregate = Depends(
-                        Provider[Container.scraping_service_factory]),
-                    crud_service: CRUDService = Depends(Provide[Container.crud_service])) -> List[Episode]:
+                          anime_id: int,
+                          scraping_service_factory: providers.FactoryAggregate = Depends(
+                              Provider[Container.scraping_service_factory]),
+                          crud_service: CRUDService = Depends(Provide[Container.crud_service])) -> List[Episode]:
     scraping_service: AbstractAnimeSiteScrapingService = scraping_service_factory(
         site)
 
@@ -179,9 +188,7 @@ async def get_anime_index(site: MangaSiteEnum,
             status_code=status.HTTP_406_NOT_ACCEPTABLE,
             detail="Anime does not exist"
         )
-    anime = Anime.from_orm(db_anime)
-    eps = await scraping_service.get_index_page(anime)
-    save_episodes(crud_service, eps, anime_id)
+    await update_episode(db_anime, scraping_service, crud_service)
     return crud_service.get_items_by_same_attr(DBEpisode, "anime_id", anime_id)
 
 
@@ -226,10 +233,34 @@ async def get_index(site: MangaSiteEnum,
     return manga
 
 
+@router.get("/episode/{site}/{episode_id}")
+@inject
+async def get_episode(site: MangaSiteEnum,
+                      episode_id: int,
+                      scraping_service_factory: providers.FactoryAggregate = Depends(
+                          Provider[Container.scraping_service_factory]),
+                      crud_service: CRUDService = Depends(Provide[Container.crud_service])):
+    scraping_service: AbstractAnimeSiteScrapingService = scraping_service_factory(
+        site)
+
+    db_ep, db_anime = get_episode_precheck(
+        episode_id, crud_service)
+
+    if not db_anime or not db_ep:
+        raise HTTPException(
+            status_code=status.HTTP_406_NOT_ACCEPTABLE,
+            detail="Anime or Episode does not exist"
+        )
+
+    await update_episode(db_anime, scraping_service, crud_service)
+
+    async for result in scraping_service.download_episode(Anime.from_orm(db_anime), Episode.from_orm(db_ep)):
+        return result
+
+
 @router.get('/chapter/{site}/{chapter_id}')
 @inject
-async def get_chapter(response: Response,
-                      site: MangaSiteEnum,
+async def get_chapter(site: MangaSiteEnum,
                       chapter_id: int,
                       scraping_service_factory: providers.FactoryAggregate = Depends(
                           Provider[Container.scraping_service_factory]),
@@ -246,7 +277,7 @@ async def get_chapter(response: Response,
     logger.info("get_chapter_precheck")
 
     db_chapter, db_manga = get_chapter_precheck(
-        response, chapter_id, crud_service)
+        chapter_id, crud_service)
 
     if not db_chapter or not db_manga:
         raise HTTPException(

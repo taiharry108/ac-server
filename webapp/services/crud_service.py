@@ -158,21 +158,33 @@ class CRUDService:
         session.commit()
         return True
 
-    def bulk_create_objs_with_unique_key(self, orm_obj_type: Type[T], items: List[Dict], unique_key: str) -> bool:
+    def bulk_create_objs_with_unique_key(self, orm_obj_type: Type[T], items: List[Dict], unique_key: str, update_attrs: List[str] = {}) -> bool:
         """Bulk create jobs, but check if a value exsists for a unique key"""
         db_items = self.get_items_by_attr(
             orm_obj_type, unique_key, [item[unique_key] for item in items])
 
-        existing_unique_keys = set(getattr(item, unique_key)
-                                   for item in db_items)
+        existing_unique_keys = set(getattr(db_item, unique_key)
+                                   for db_item in db_items)
+        logger.info(db_items)
+
+        if update_attrs:
+            existing_items = {
+                item[unique_key]: item for item in items if item[unique_key] in existing_unique_keys}
+            db_items = {getattr(db_item, unique_key): db_item for db_item in db_items}
+            
+            with self.database.session() as session:
+                logger.info(
+                    f"going to update existing items for {update_attrs}")
+
+                [self._update_object(session, orm_obj_type, db_items[item_key].id, **{attr_name: item[attr_name] for attr_name in update_attrs})
+                 for item_key, item in existing_items.items()]
 
         # filter out items that already exist
         items = [item for item in items if not item[unique_key]
                  in existing_unique_keys]
         return self.bulk_create_objs(orm_obj_type, items)
 
-    @add_session
-    def update_object(self, session: Session, orm_obj_type: Type[T], id: int, **kwargs) -> bool:
+    def _update_object(self, session: Session, orm_obj_type: Type[T], id: int, **kwargs) -> bool:
         db_item = session.query(orm_obj_type).get(id)
         if not db_item:
             return False
@@ -182,3 +194,7 @@ class CRUDService:
             setattr(db_item, key, value)
         session.commit()
         return True
+
+    @add_session
+    def update_object(self, session: Session, orm_obj_type: Type[T], id: int, **kwargs) -> bool:
+        return self._update_object(session, orm_obj_type, id, **kwargs)
