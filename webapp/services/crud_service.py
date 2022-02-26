@@ -121,39 +121,43 @@ class CRUDService:
         return await func(session, db_obj, db_item, **kwargs)
 
     async def add_item_to_obj(self, session: Session, orm_obj_type: Type[T], orm_item_type: Type[T],
-                        obj_id: int, item_id: int, attr_name: str) -> bool:
+                        obj_id: int, item_id: int, attr_name: str, auto_commit: bool = True) -> bool:
         async def append_item(session, db_obj, db_item):
             db_obj = await self.get_item_by_id(session, orm_obj_type, db_obj.id, attr_name)
             if not db_item in getattr(db_obj, attr_name):
                 getattr(db_obj, attr_name).append(db_item)
-                await session.commit()
+                if auto_commit:
+                    await session.commit()
                 return db_obj
             return None
             
         return await self.item_obj_iteraction(session, orm_obj_type, orm_item_type, obj_id, item_id, append_item)
 
     async def remove_item_from_obj(self, session: Session, orm_obj_type: Type[T], orm_item_type: Type[T],
-                             obj_id: int, item_id: int, attr_name: str) -> bool:
+                             obj_id: int, item_id: int, attr_name: str, auto_commit: bool = True) -> bool:
         async def remove_item(session, db_obj, db_item):
             db_obj = await self.get_item_by_id(session, orm_obj_type, db_obj.id, attr_name)
             if db_item in getattr(db_obj, attr_name):
                 getattr(db_obj, attr_name).remove(db_item)
-                await session.commit()
+                if auto_commit:
+                    await session.commit()
                 return db_obj
             return None
         return await self.item_obj_iteraction(session, orm_obj_type, orm_item_type, obj_id, item_id, remove_item)
 
-    async def create_obj(self, session: Session, orm_obj_type: Type[T], **kwargs) -> T:
+    async def create_obj(self, session: Session, orm_obj_type: Type[T], auto_commit: bool = True, **kwargs) -> T:
         db_item = orm_obj_type(**kwargs)
         session.add(db_item)
-        await session.commit()
+        if auto_commit:
+            await session.commit()
         return db_item
 
-    async def bulk_create_objs(self, session: Session, orm_obj_type: Type[T], items: List[Dict]) -> List[T]:
+    async def bulk_create_objs(self, session: Session, orm_obj_type: Type[T], items: List[Dict], auto_commit: bool = True) -> List[T]:
         logger.info(f"Going to bulk create {len(items)} items")
         result = [orm_obj_type(**item) for item in items]
-        session.add_all(result)        
-        await session.commit()
+        session.add_all(result)
+        if auto_commit:
+            await session.commit()
         return result
 
     async def bulk_create_objs_with_unique_key(self, session: Session, orm_obj_type: Type[T], items: List[Dict], unique_key: str, update_attrs: List[str] = {}) -> bool:
@@ -183,7 +187,7 @@ class CRUDService:
                  in existing_unique_keys]
         return await self.bulk_create_objs(session, orm_obj_type, items)
 
-    async def _update_object(self, session: Session, orm_obj_type: Type[T], id: int, **kwargs) -> Union[T, None]:
+    async def _update_object(self, session: Session, orm_obj_type: Type[T], id: int, auto_commit: bool = True, **kwargs) -> Union[T, None]:
         q = select(orm_obj_type).where(getattr(orm_obj_type, "id") == id)
         db_item = (await session.execute(q)).one()[0]
         logger.info(db_item)
@@ -193,8 +197,9 @@ class CRUDService:
             if not hasattr(db_item, key):
                 return None
             setattr(db_item, key, value)
-        await session.commit()
+        if auto_commit:
+            await session.commit()
         return db_item
 
-    async def update_object(self, session: Session, orm_obj_type: Type[T], id: int, **kwargs) -> Union[T, None]:
-        return await self._update_object(session, orm_obj_type, id, **kwargs)
+    async def update_object(self, session: Session, orm_obj_type: Type[T], id: int, auto_commit: bool = True, **kwargs) -> Union[T, None]:
+        return await self._update_object(session, orm_obj_type, id, auto_commit=auto_commit, **kwargs)
