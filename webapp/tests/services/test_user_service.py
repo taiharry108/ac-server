@@ -8,27 +8,26 @@ from webapp.models.manga import Manga
 
 from webapp.models.db_models import User as DBUser, Manga as DBManga, History as DBHistory, Chapter as DBChapter
 from webapp.services.crud_service import CRUDService
-
 from webapp.services.database import Database
-
 from webapp.services.secruity_service import SecurityService
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from logging import getLogger
 from logging import config
 
 from webapp.services.user_service import UserService
-from webapp.tests.utils import delete_all
+from webapp.tests.utils import delete_all, delete_dependent_tables
 config.fileConfig('logging.conf', disable_existing_loggers=False)
 logger = getLogger(__name__)
 
 
 @pytest.fixture(autouse=True, scope="module")
-def database():
+async def database():
     container = Container()
     container.db.override(providers.Singleton(
-        Database, db_url="postgresql://taiharry:123456@localhost:5432/testAcDB"))
+        Database, db_url="postgresql+asyncpg://taiharry:123456@localhost:5432/testAcDB"))
     db = container.db()
-    db.create_database()
+    await db.create_database()
     return db
 
 
@@ -66,11 +65,18 @@ def password() -> str: return "123456"
 
 @pytest.fixture(autouse=True, scope="module")
 async def run_before_and_after_tests(database: Database, username: str, password: str, crud_service: CRUDService, manga: Manga):
-    with database.session() as session:
-        delete_all(session)
-    crud_service.create_obj(DBUser, email=username,
-                            hashed_password=password)
-    crud_service.create_obj(DBManga, name=manga.name, url=manga.url)
+    async with database.session() as session:
+        async with session.begin():
+            await delete_all(session)
+            await session.commit()
+    
+    async with database.session() as session:
+        async with session.begin():
+            await delete_dependent_tables(session)
+            session.add(DBUser(email=username, hashed_password=password))
+            session.add(DBManga(name=manga.name, url=manga.url))
+            await session.commit()
+    
     yield
 
 
@@ -79,8 +85,15 @@ async def manga_id(crud_service: CRUDService, manga: Manga) -> int:
     return crud_service.get_item_by_attr(DBManga, "name", manga.name).id
 
 
-async def test_get_user(user_service: UserService, username: str):
-    db_user = user_service.get_user(username)
+@pytest.fixture
+async def session(crud_service: CRUDService) -> AsyncSession:
+    async with crud_service.database.session() as session:
+        async with session.begin():
+            yield session
+
+
+async def test_get_user(user_service: UserService, username: str, session: AsyncSession):
+    db_user = await user_service.get_user(session, username)
     if db_user is None:
         assert False
 
@@ -89,7 +102,7 @@ async def test_get_user(user_service: UserService, username: str):
 
 async def test_create_user(user_service: UserService, security_service: SecurityService, password: str):
     username = "test_user2"
-    db_user = user_service.create_user(username, password)
+    db_user = await user_service.create_user(username, password)
     assert db_user.email == username
     assert security_service.verify_password(password, db_user.hashed_password)
 
