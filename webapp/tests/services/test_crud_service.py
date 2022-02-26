@@ -209,3 +209,12 @@ async def test_get_items_by_same_attr(crud_service: CRUDService, session: AsyncS
     manga_id = await crud_service.get_id_by_attr(session, Manga, "url", "https://example.com/manga")
     db_chapters = await crud_service.get_items_by_same_attr(session, Chapter, 'manga_id', manga_id)
     assert len(db_chapters) == 10
+
+
+async def test_get_items_by_ids(crud_service: CRUDService, session: AsyncSession):
+    manga_id = await crud_service.get_id_by_attr(session, Manga, "url", "https://example.com/manga")
+    db_chapters = await crud_service.get_items_by_same_attr(session, Chapter, 'manga_id', manga_id)
+    chap_ids = [chap.id for chap in db_chapters]
+    db_chapters2 = await crud_service.get_items_by_ids(session, Chapter, chap_ids, False)
+    assert len(db_chapters) == len(db_chapters2)
+

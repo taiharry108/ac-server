@@ -59,15 +59,17 @@ class CRUDService:
             return None
         return result[0]
          
-    def get_attr_of_item_by_id(self, session: Session, orm_obj_type: Type[T], id: int, attr_name: str):
+    async def get_attr_of_item_by_id(self, session: Session, orm_obj_type: Type[T], id: int, attr_name: str):
         db_item = self.get_item_by_id(session, orm_obj_type, id)
-        return getattr(db_item, attr_name)
+        return await getattr(db_item, attr_name)
 
-    def get_items_by_ids(self, session: Session, orm_obj_type: Type[T], ids: List[int], keep_none=False) -> List[T]:
+    async def get_items_by_ids(self, session: Session, orm_obj_type: Type[T], ids: List[int], keep_none=False) -> List[T]:
         """Get item by id, return empty list if not exists"""
-        result = session.query(orm_obj_type).filter(
-            orm_obj_type.id.in_(ids)).all()
-        return rearrange_items(ids, result, "id", True, keep_none=keep_none)
+        q = select(orm_obj_type).where(getattr(orm_obj_type, "id").in_(ids))
+        result = await session.execute(q)
+        result = [t[0] for t in result.all()]
+        db_items = rearrange_items(ids, result, "id", True, keep_none=keep_none)
+        return db_items
 
     async def get_item_by_attr(self, session: Session, orm_obj_type: Type[T], attr_name: str, attr_value: Any) -> T:
         return await self.get_item_by_attrs(session, orm_obj_type, **{attr_name: attr_value})
