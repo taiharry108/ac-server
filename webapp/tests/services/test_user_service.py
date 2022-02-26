@@ -100,19 +100,19 @@ async def test_get_user(user_service: UserService, username: str, session: Async
     assert db_user.username == username
 
 
-async def test_create_user(user_service: UserService, security_service: SecurityService, password: str):
+async def test_create_user(user_service: UserService, security_service: SecurityService, password: str, session: AsyncSession):
     username = "test_user2"
-    db_user = await user_service.create_user(username, password)
+    db_user = await user_service.create_user(session, username, password)
     assert db_user.email == username
     assert security_service.verify_password(password, db_user.hashed_password)
 
 
-async def test_create_user(user_service: UserService, username: str, password: str):
+async def test_create_user_twice(user_service: UserService, username: str, password: str, session: AsyncSession):
     db_user = user_service.create_user(username, password)
     assert db_user is None
 
 
-async def test_add_fav(user_service: UserService, crud_service: CRUDService, username: str, manga_id: int):
+async def test_add_fav(user_service: UserService, crud_service: CRUDService, username: str, manga_id: int, session: AsyncSession):
     db_user = crud_service.get_item_by_attr(DBUser, "email", username)
     user_id = db_user.id
     result = user_service.add_fav(manga_id, user_id)
@@ -123,13 +123,13 @@ async def test_add_fav(user_service: UserService, crud_service: CRUDService, use
     assert len(list(filter(lambda m: m.id, fav_mangas))) != 0
 
 
-async def test_add_fav_twice(user_service: UserService, crud_service: CRUDService, username: str, manga_id: int):
+async def test_add_fav_twice(user_service: UserService, crud_service: CRUDService, username: str, manga_id: int, session: AsyncSession):
     db_user = crud_service.get_item_by_attr(DBUser, "email", username)
     user_id = db_user.id
     assert not user_service.add_fav(manga_id, user_id)
 
 
-async def test_add_history(user_service: UserService, crud_service: CRUDService, username: str, manga_id: int):
+async def test_add_history(user_service: UserService, crud_service: CRUDService, username: str, manga_id: int, session: AsyncSession):
     db_user = crud_service.get_item_by_attr(DBUser, "email", username)
     user_id = db_user.id
     assert user_service.add_history(manga_id, user_id)
@@ -141,14 +141,14 @@ async def test_add_history(user_service: UserService, crud_service: CRUDService,
     assert db_history.last_added
 
 
-async def test_add_history_twice(user_service: UserService, crud_service: CRUDService, username: str, manga_id: int):
+async def test_add_history_twice(user_service: UserService, crud_service: CRUDService, username: str, manga_id: int, session: AsyncSession):
     db_user = crud_service.get_item_by_attr(DBUser, "email", username)
     user_id = db_user.id
     assert user_service.add_history(manga_id, user_id)
     assert user_service.add_history(manga_id, user_id)
 
 
-async def test_get_fav(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int):
+async def test_get_fav(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int, session: AsyncSession):
     db_user = crud_service.get_item_by_attr(DBUser, "email", username)
     user_id = db_user.id
     user_service.add_fav(manga_id, user_id)
@@ -159,7 +159,7 @@ async def test_get_fav(crud_service: CRUDService, user_service: UserService, use
     assert fav_mangas[0].id == manga_id
 
 
-async def test_get_history(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int):
+async def test_get_history(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int, session: AsyncSession):
     db_user = crud_service.get_item_by_attr(DBUser, "email", username)
     user_id = db_user.id
     user_service.add_history(manga_id, user_id)
@@ -170,7 +170,7 @@ async def test_get_history(crud_service: CRUDService, user_service: UserService,
     assert history_mangas[0].manga_id == manga_id
 
 
-async def test_remove_fav(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int):
+async def test_remove_fav(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int, session: AsyncSession):
     db_user = crud_service.get_item_by_attr(DBUser, "email", username)
     user_id = db_user.id
     user_service.remove_fav(manga_id, user_id)
@@ -181,7 +181,7 @@ async def test_remove_fav(crud_service: CRUDService, user_service: UserService, 
     assert len(filtered_mangas) == 0
 
 
-async def test_remove_history(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int):
+async def test_remove_history(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int, session: AsyncSession):
     db_user = crud_service.get_item_by_attr(DBUser, "email", username)
     user_id = db_user.id
     user_service.remove_history(manga_id, user_id)
@@ -192,7 +192,7 @@ async def test_remove_history(crud_service: CRUDService, user_service: UserServi
     assert len(filtered_mangas) == 0
 
 
-async def test_update_history(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int):
+async def test_update_history(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int, session: AsyncSession):
     db_chapter = crud_service.create_obj(DBChapter, title="Test title", page_url="https://example.com",
                                          manga_id=manga_id, type=MangaIndexTypeEnum.CHAPTER.value)
     db_user = crud_service.get_item_by_attr(DBUser, "email", username)
@@ -205,7 +205,7 @@ async def test_update_history(crud_service: CRUDService, user_service: UserServi
     assert db_history.chaper_id == db_chapter.id
 
 
-async def test_get_latest_chap(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int):
+async def test_get_latest_chap(crud_service: CRUDService, user_service: UserService, username: str, manga_id: int, session: AsyncSession):
     db_chapter = crud_service.create_obj(DBChapter, title="Test title", page_url="https://example.com/1",
                                          manga_id=manga_id, type=MangaIndexTypeEnum.CHAPTER.value)
     db_user = crud_service.get_item_by_attr(DBUser, "email", username)
