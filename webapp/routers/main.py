@@ -2,7 +2,7 @@ import json
 from logging import getLogger
 from typing import Dict, List, Tuple, Union
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi import Response, status
+from fastapi import status
 from fastapi.responses import StreamingResponse
 from webapp.containers import Container
 
@@ -20,6 +20,7 @@ from webapp.services.crud_service import CRUDService
 
 from webapp.models.db_models import Manga as DBManga, MangaSite as DBMangaSite
 from webapp.models.db_models import Chapter as DBChapter, Page as DBPage, Anime as DBAnime, Episode as DBEpisode
+from webapp.services.download_service import DownloadService
 
 router = APIRouter()
 
@@ -31,7 +32,7 @@ def save_chapters(crud_service: CRUDService, chapters: List[Chapter], manga_id: 
     chapters = [
         {
             "title": chapter.title,
-            "page_url": chapter.page_url,
+            "page_url": str(chapter.page_url),
             "manga_id": manga_id,
             "type": index_type.value
         } for chapter in chapters]
@@ -217,6 +218,7 @@ async def get_index(site: MangaSiteEnum,
     for index_type in manga.chapters:
         chapters = manga.chapters[index_type]
         page_urls = [chapter.page_url for chapter in chapters]
+        logger.info(f"going to save chapter {index_type=}")
         save_chapters(crud_service, chapters, manga_id, index_type)
 
         manga.chapters[index_type] = crud_service.get_items_by_attr(

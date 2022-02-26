@@ -236,6 +236,8 @@ async def init_data(database: Database = Depends(Provide[Container.db])):
     with database.session() as session:
         site = MangaSite(name="manhuaren", url="https://www.manhuaren.com")
         session.add(site)
+        site = MangaSite(name="anime1", url="https://anime1.me/")
+        session.add(site)
         session.commit()
 
     return {"success": 200}

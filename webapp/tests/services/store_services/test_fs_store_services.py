@@ -1,3 +1,4 @@
+import io
 from logging import getLogger
 from dependency_injector.wiring import inject, Provider, Provide
 from dependency_injector import providers
@@ -11,12 +12,15 @@ import pytest
 
 logger = getLogger(__name__)
 
+async def tmp_data():
+    for i in range(10):
+        yield bytes(f"{i}", 'utf8')
 
-@pytest.fixture()
+
+@pytest.fixture
 def data():
-    test_data = b"123"
     path = "test.txt"
-    return {"test_data": test_data, "path": path}
+    return {"path": path}
 
 
 @pytest.fixture
@@ -35,22 +39,17 @@ async def run_before_and_after_tests(fs_store_service: FSStoreService, data):
 
 
 async def test_persist_file(fs_store_service: FSStoreService, data):
-    test_data = data["test_data"]
     path = data["path"]
-    persist_result = fs_store_service.persist_file(path, test_data)
-    assert persist_result
+    result = await fs_store_service.persist_file(path, tmp_data())
+    assert result
 
     absolute_path = fs_store_service.get_filesystem_path(path)
     assert absolute_path.exists()
 
-    with open(absolute_path, "rb") as f:
-        assert test_data == f.read()
-
 
 async def test_stat_file(fs_store_service: FSStoreService, data):
-    test_data = data["test_data"]
     path = data["path"]
-    persist_result = fs_store_service.persist_file(path, test_data)
-    stat_dict = fs_store_service.stat_file(path)
+    persist_result = await fs_store_service.persist_file(path, tmp_data())
+    stat_dict = await fs_store_service.stat_file(path)
     assert persist_result
     assert len(stat_dict) == 2

@@ -81,6 +81,8 @@ class CRUDService:
     def get_items_by_attr(self, session: Session, orm_obj_type: Type[T], attr_name: str, attr_values: List[Any]) -> List[T]:
         db_items = session.query(orm_obj_type).filter(
             getattr(orm_obj_type, attr_name).in_(attr_values)).all()
+        
+        logger.info(f"{len(db_items)=}")
 
         db_items = rearrange_items(attr_values, db_items, attr_name, True)
         return db_items
@@ -165,13 +167,13 @@ class CRUDService:
 
         existing_unique_keys = set(getattr(db_item, unique_key)
                                    for db_item in db_items)
-        logger.info(db_items)
 
         if update_attrs:
             existing_items = {
                 item[unique_key]: item for item in items if item[unique_key] in existing_unique_keys}
-            db_items = {getattr(db_item, unique_key): db_item for db_item in db_items}
-            
+            db_items = {getattr(db_item, unique_key)
+                                : db_item for db_item in db_items}
+
             with self.database.session() as session:
                 logger.info(
                     f"going to update existing items for {update_attrs}")

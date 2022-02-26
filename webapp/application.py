@@ -1,6 +1,6 @@
 """Application module."""
 
-import logging
+from logging import config
 
 # setup loggers
 
@@ -11,7 +11,10 @@ from webapp.routers import main
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI
 
-logging.config.fileConfig('logging.conf', disable_existing_loggers=False)
+from mangum import Mangum
+
+
+config.fileConfig('logging.conf', disable_existing_loggers=False)
 
 async def on_start_up():
     pass
@@ -23,7 +26,7 @@ async def on_shutdown():
 
 def create_app() -> FastAPI:
     container = Container()
-
+    
     db = container.db()
     db.create_database()
 
@@ -43,3 +46,9 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+@app.get("/")
+async def root():
+    return {"message": "hello world"}
+
+handler = Mangum(app)

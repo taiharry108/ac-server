@@ -2,7 +2,7 @@ import dataclasses
 import hashlib
 from logging import getLogger
 from pathlib import Path
-from typing import Dict
+from typing import AsyncIterator, Dict
 
 from webapp.services.store_services.abstract_store_service import AbstractStoreService
 
@@ -33,15 +33,17 @@ class FSStoreService(AbstractStoreService):
     def get_filesystem_path(self, path: str):
         return Path(self.base_dir) / path
 
-    def persist_file(self, path: str, data: bytes, meta: Dict = None) -> str:
+    async def persist_file(self, path: str, async_iter: AsyncIterator[bytes] = None, meta: Dict = None) -> str:
         """Save a file to store return path"""
         absolute_path = self.get_filesystem_path(path)
         absolute_path.parent.mkdir(exist_ok=True, parents=True)
-        with open(absolute_path, "wb") as f:
-            f.write(data)
+        if async_iter is not None:
+            with open(absolute_path, "wb") as f:
+                async for chunk in async_iter:
+                    f.write(chunk)
         return str(path)
 
-    def stat_file(self, path: str) -> Dict[str, str]:
+    async def stat_file(self, path: str) -> Dict[str, str]:
         """Return stat of a file"""
         absolute_path = self.get_filesystem_path(path)
         try:
@@ -54,3 +56,9 @@ class FSStoreService(AbstractStoreService):
             checksum = md5sum(f)
 
         return {'last_modified': last_modified, 'checksum': checksum}
+    
+    async def file_exists(self, path: str) -> bool:
+        """Return True if a file with a given path exists"""
+        absolute_path = self.get_filesystem_path(path)
+        return absolute_path.exists()
+

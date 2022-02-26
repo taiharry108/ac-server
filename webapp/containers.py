@@ -13,6 +13,7 @@ from webapp.services.store_services.fs_store_service import FSStoreService
 from webapp.services.database import Database
 
 from passlib.context import CryptContext
+from webapp.services.store_services.s3_store_service import S3StoreService
 
 from webapp.services.user_service import UserService
 
@@ -33,6 +34,16 @@ class Container(containers.DeclarativeContainer):
         fs=providers.Singleton(
             FSStoreService,
             base_dir=config.store_service.base_dir
+        ),
+        s3=providers.Singleton(
+            S3StoreService,
+            aws_access_key_id=config.s3_store_service.aws_access_key_id,
+            aws_secret_access_key=config.s3_store_service.aws_secret_access_key,
+            aws_region_name=config.s3_store_service.aws_region_name,
+            aws_use_ssl=config.s3_store_service.aws_use_ssl,
+            aws_verify=config.s3_store_service.aws_verify,
+            uri=config.s3_store_service.uri,
+            base_dir="webapp/"
         )
     )
 

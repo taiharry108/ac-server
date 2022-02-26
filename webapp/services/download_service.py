@@ -1,4 +1,5 @@
 
+import io
 from logging import getLogger
 from pathlib import Path
 from typing import Callable, Dict, Union, List
@@ -26,16 +27,50 @@ def request_resp(method: str = "GET"):
             follow_redirects = kwargs.pop(
                 "follow_redirects") if "follow_redirects" in kwargs else False
             data = kwargs.pop("data") if "data" in kwargs else {}
-            
-            resp = await self.client.request(method, url,
-                                             headers=headers,
-                                             follow_redirects=follow_redirects,
-                                             data=data)
+
+            logger.info(f"going to send a {method} request to {url}")
+
+            client: AsyncClient = self.client
+
+            resp = await client.request(method, url,
+                                        headers=headers,
+                                        follow_redirects=follow_redirects,
+                                        data=data)
 
             if resp.status_code == 200:
                 return await func(self, resp, **kwargs)
             else:
                 raise RuntimeError(f"response status code: {resp.status_code}")
+        return wrapped
+    return outter_wrapped
+
+
+def stream_resp(method: str = "GET"):
+    def outter_wrapped(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapped(self, url: HttpUrl, *args, **kwargs):
+            headers = {}
+            headers.update(self.headers)
+            follow_redirects = kwargs.pop(
+                "follow_redirects") if "follow_redirects" in kwargs else False
+            data = kwargs.pop("data") if "data" in kwargs else {}
+            if "headers" in kwargs:
+                headers.update(kwargs.pop("headers"))
+
+            logger.info(f"going to send a {method} request to {url}")
+
+            client: AsyncClient = self.client
+
+            async with client.stream(method,
+                                     url,
+                                     headers=headers,
+                                     follow_redirects=follow_redirects,
+                                     data=data) as resp:
+                if resp.status_code == 200:                    
+                    return await func(self, resp, *args, **kwargs)
+                else:
+                    raise RuntimeError(
+                        f"response status code: {resp.status_code}")
         return wrapped
     return outter_wrapped
 
@@ -56,10 +91,10 @@ class DownloadService:
 
         self.headers = headers
         self.store_service: AbstractStoreService = store_service_factory(store)
-    
+
     @request_resp("POST")
     async def post_json(self, resp: Response) -> Union[List, Dict]:
-        """Make a get request and return with json"""        
+        """Make a get request and return with json"""
         return resp.json()
 
     @request_resp("GET")
@@ -90,10 +125,8 @@ class DownloadService:
 
         return file_path
 
-    @request_resp("GET")
+    @stream_resp("GET")
     async def download_img(self, resp: Response, download_path: Path = None, filename: str = None, **kwargs) -> Dict:
-        b = resp.content
-
         content_type = resp.headers['content-type']
         if not content_type.startswith('image'):
             raise RuntimeError("Response is not an image")
@@ -101,15 +134,13 @@ class DownloadService:
         file_path = self.generate_file_path(
             content_type, download_path, filename)
 
-        result_path = self.store_service.persist_file(str(file_path), b)
+        result_path = await self.store_service.persist_file(str(file_path), resp.aiter_bytes())
         result = {"pic_path": result_path}
         result.update(kwargs)
         return result
-    
-    @request_resp("GET")
-    async def download_vid(self, resp: Response, download_path: Path = None, filename: str = None, **kwargs) -> Dict:
-        b = resp.content
 
+    @request_resp("HEAD")
+    async def download_vid(self, resp: Response, download_path: Path = None, filename: str = None, **kwargs) -> Dict:
         content_type = resp.headers['content-type']
         if not content_type.startswith('video'):
             raise RuntimeError("Response is not a video")
@@ -118,7 +149,16 @@ class DownloadService:
         file_path = self.generate_file_path(
             content_type, download_path, filename)
 
-        result_path = self.store_service.persist_file(str(file_path), b)
+        if await self.store_service.file_exists(file_path):
+            result = {"vid_path": str(file_path)}
+            result.update(kwargs)
+            return result
+
+        return await self._download_vid(resp.url, file_path=str(file_path), **kwargs)
+
+    @stream_resp("GET")
+    async def _download_vid(self, resp: Response, file_path: str, **kwargs) -> Dict:        
+        result_path = await self.store_service.persist_file(file_path, resp.aiter_bytes())
         result = {"vid_path": result_path}
         result.update(kwargs)
         return result
