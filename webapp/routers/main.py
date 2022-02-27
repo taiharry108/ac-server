@@ -2,7 +2,7 @@ from collections import defaultdict
 from email.policy import default
 import json
 from logging import getLogger
-from typing import AsyncGenerator, Dict, List, Tuple, Union
+from typing import AsyncIterable, Dict, List, Tuple, Union
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status
 from fastapi.responses import StreamingResponse
@@ -45,7 +45,7 @@ async def save_chapters(crud_service: CRUDService, session: AsyncSession, manga_
             } for chapter in chapters]
         for chapter in chapters:
             page_url_dict[chapter.page_url] = index_type
-        
+
     logger.info(f"going to save chapter {len(all_chapters)=}")
 
     db_chapters = await crud_service.bulk_create_objs_with_unique_key(session,
@@ -53,7 +53,7 @@ async def save_chapters(crud_service: CRUDService, session: AsyncSession, manga_
                                                                       all_chapters,
                                                                       "page_url",
                                                                       auto_commit=False)
-    
+
     db_chapter_dict = defaultdict(list)
 
     for db_chapter in db_chapters:
@@ -84,7 +84,7 @@ async def update_episode(db_anime: DBAnime,
     save_episodes(crud_service, eps, db_anime.id)
 
 
-def save_pages(crud_service: CRUDService, pages: List[Dict], chapter_id: int) -> bool:
+async def save_pages(session: AsyncSession, crud_service: CRUDService, pages: List[Dict], chapter_id: int) -> bool:
     num_pages = len(pages)
 
     pages = [{
@@ -93,17 +93,17 @@ def save_pages(crud_service: CRUDService, pages: List[Dict], chapter_id: int) ->
         "chapter_id": chapter_id,
         "total": num_pages
     } for page in pages]
-    return crud_service.bulk_create_objs_with_unique_key(
-        DBPage, pages, "pic_path")
+    return await crud_service.bulk_create_objs_with_unique_key(
+        session, DBPage, pages, "pic_path")
 
 
-def get_chapter_precheck(chapter_id: int, crud_service: CRUDService) -> Tuple[DBChapter, DBManga]:
-    db_chapter = crud_service.get_item_by_id(DBChapter, chapter_id)
+async def get_chapter_precheck(session: AsyncSession, chapter_id: int, crud_service: CRUDService) -> Tuple[DBChapter, DBManga]:
+    db_chapter = await crud_service.get_item_by_id(session, DBChapter, chapter_id)
 
     if not db_chapter:
         return None, None
 
-    db_manga = crud_service.get_item_by_id(DBManga, db_chapter.manga_id)
+    db_manga = await crud_service.get_item_by_id(session, DBManga, db_chapter.manga_id)
     return db_chapter, db_manga
 
 
@@ -117,12 +117,13 @@ def get_episode_precheck(episode_id: int, crud_service: CRUDService) -> Tuple[DB
     return db_ep, db_anime
 
 
-def create_stream_response(pages: List[DBPage] = None,
-                           scraping_service: Union[AbstractMangaSiteScrapingService, None] = None,
-                           manga: Union[MangaBase, None] = None,
-                           chapter: Union[Chapter, None] = None,
-                           crud_service: Union[CRUDService, None] = None,
-                           chapter_id: Union[int, None] = None):
+async def create_stream_response(session: AsyncSession,
+                                 pages: List[DBPage] = None,
+                                 scraping_service: Union[AbstractMangaSiteScrapingService, None] = None,
+                                 manga: Union[MangaBase, None] = None,
+                                 chapter: Union[Chapter, None] = None,
+                                 crud_service: Union[CRUDService, None] = None,
+                                 chapter_id: Union[int, None] = None):
     async def img_gen():
         if pages:
             for db_page in pages:
@@ -140,10 +141,18 @@ def create_stream_response(pages: List[DBPage] = None,
                 result.append(img_dict)
             logger.info("going to save to database")
 
-            save_pages(crud_service, result, chapter_id)
+            await save_pages(session, crud_service, result, chapter_id)
         yield 'data: {}\n\n'
 
     return StreamingResponse(img_gen(), media_type="text/event-stream")
+
+
+@inject
+async def get_session(crud_service: CRUDService = Depends(
+        Provide[Container.crud_service])) -> AsyncSession:
+    async with crud_service.database.session() as session:
+        async with session.begin():
+            yield session
 
 
 @router.get("/search_anime/{site}/{search_keyword}", response_model=List[Anime])
@@ -179,23 +188,24 @@ async def search_manga(site: MangaSiteEnum,
                        scraping_service_factory: providers.FactoryAggregate = Depends(
                            Provider[Container.scraping_service_factory]),
                        crud_service: CRUDService = Depends(
-                           Provide[Container.crud_service])):
+                           Provide[Container.crud_service]),
+                       session_iter: AsyncIterable[AsyncSession] = Depends(get_session)):
 
     scraping_service: AbstractMangaSiteScrapingService = scraping_service_factory(
         site)
     mangas = await scraping_service.search_manga(search_keyword)
-    async with crud_service.database.session() as session:
-        async with session.begin():
-            manga_site_id = await crud_service.get_id_by_attr(
-                session,
-                DBMangaSite,
-                "name",
-                site.value
-            )
 
-            mangas = [{"name": manga.name, "url": str(manga.url), "manga_site_id": manga_site_id}
-                      for manga in mangas]
-            return await crud_service.bulk_create_objs_with_unique_key(session, DBManga, mangas, "url")
+    session = await session_iter.__anext__()
+    manga_site_id = await crud_service.get_id_by_attr(
+        session,
+        DBMangaSite,
+        "name",
+        site.value
+    )
+
+    mangas = [{"name": manga.name, "url": str(manga.url), "manga_site_id": manga_site_id}
+              for manga in mangas]
+    return await crud_service.bulk_create_objs_with_unique_key(session, DBManga, mangas, "url")
 
 
 @router.get("/anime_index/{site}/{anime_id}")
@@ -225,40 +235,41 @@ async def get_index(site: MangaSiteEnum,
                     manga_id: int,
                     scraping_service_factory: providers.FactoryAggregate = Depends(
                         Provider[Container.scraping_service_factory]),
-                    crud_service: CRUDService = Depends(Provide[Container.crud_service])) -> Manga:
+                    crud_service: CRUDService = Depends(
+                        Provide[Container.crud_service]),
+                    session_iter: AsyncIterable[AsyncSession] = Depends(get_session)) -> Manga:
 
     scraping_service: AbstractMangaSiteScrapingService = scraping_service_factory(
         site)
 
-    async with crud_service.database.session() as session:
-        async with session.begin():
-            db_manga = await crud_service.get_item_by_id(session, DBManga, manga_id)
+    session = await session_iter.__anext__()
 
-            if db_manga is None:
-                raise HTTPException(
-                    status_code=status.HTTP_406_NOT_ACCEPTABLE,
-                    detail="Manga does not exist"
-                )
+    db_manga = await crud_service.get_item_by_id(session, DBManga, manga_id)
 
-            manga = Manga(name=db_manga.name, url=db_manga.url, id=db_manga.id)
+    if db_manga is None:
+        raise HTTPException(
+            status_code=status.HTTP_406_NOT_ACCEPTABLE,
+            detail="Manga does not exist"
+        )
 
-            manga = await scraping_service.get_index_page(manga)
+    manga = Manga(name=db_manga.name, url=db_manga.url, id=db_manga.id)
 
-            db_chapter_dict = await save_chapters(crud_service, session, manga_id, manga)
-            for index_type in db_chapter_dict:
-                manga.chapters[index_type] = db_chapter_dict[index_type]
+    manga = await scraping_service.get_index_page(manga)
 
+    db_chapter_dict = await save_chapters(crud_service, session, manga_id, manga)
+    for index_type in db_chapter_dict:
+        manga.chapters[index_type] = db_chapter_dict[index_type]
 
-            meta_data = {
-                # "last_update": manga.last_update,
-                "finished": manga.finished,
-                "thum_img": manga.thum_img
-            }
+    meta_data = {
+        # "last_update": manga.last_update,
+        "finished": manga.finished,
+        "thum_img": manga.thum_img
+    }
 
-            await crud_service.update_object(session, DBManga, manga_id, **meta_data, auto_commit=False)
-            await session.commit()
+    await crud_service.update_object(session, DBManga, manga_id, **meta_data, auto_commit=False)
+    await session.commit()
 
-            return manga
+    return manga
 
 
 @router.get("/episode/{site}/{episode_id}")
@@ -292,20 +303,23 @@ async def get_chapter(site: MangaSiteEnum,
                       chapter_id: int,
                       scraping_service_factory: providers.FactoryAggregate = Depends(
                           Provider[Container.scraping_service_factory]),
-                      crud_service: CRUDService = Depends(Provide[Container.crud_service])):
-    pages = crud_service.get_items_by_same_attr(
-        DBPage, "chapter_id", chapter_id, "idx")
+                      crud_service: CRUDService = Depends(
+                          Provide[Container.crud_service]),
+                      session_iter: AsyncIterable[AsyncSession] = Depends(get_session)):
+    session = await session_iter.__anext__()
+    pages = await crud_service.get_items_by_same_attr(
+        session, DBPage, "chapter_id", chapter_id, "idx")
 
     if pages:
         logger.info("found pages in db")
-        return create_stream_response(pages, None, None, None, None, None)
+        return await create_stream_response(None, pages, None, None, None, None, None)
 
     scraping_service: AbstractMangaSiteScrapingService = scraping_service_factory(
         site)
     logger.info("get_chapter_precheck")
 
-    db_chapter, db_manga = get_chapter_precheck(
-        chapter_id, crud_service)
+    db_chapter, db_manga = await get_chapter_precheck(
+        session, chapter_id, crud_service)
 
     if not db_chapter or not db_manga:
         raise HTTPException(
@@ -317,4 +331,4 @@ async def get_chapter(site: MangaSiteEnum,
     chapter = Chapter.from_orm(db_chapter)
     logger.info("creating response")
 
-    return create_stream_response(pages, scraping_service, manga, chapter, crud_service, chapter_id)
+    return await create_stream_response(session, pages, scraping_service, manga, chapter, crud_service, chapter_id)
