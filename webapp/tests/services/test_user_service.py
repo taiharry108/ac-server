@@ -2,7 +2,6 @@ import pytest
 from dependency_injector.wiring import inject, Provide
 from dependency_injector import providers
 from webapp.containers import Container
-from webapp.models.manga_index_type_enum import MangaIndexTypeEnum
 from webapp.models.user import User
 from webapp.models.manga import Manga
 
@@ -19,16 +18,6 @@ from webapp.services.user_service import UserService
 from webapp.tests.utils import delete_all, delete_dependent_tables
 config.fileConfig('logging.conf', disable_existing_loggers=False)
 logger = getLogger(__name__)
-
-
-@pytest.fixture(autouse=True, scope="module")
-async def database():
-    container = Container()
-    container.db.override(providers.Singleton(
-        Database, db_url="postgresql+asyncpg://taiharry:123456@localhost:5432/testAcDB"))
-    db = container.db()
-    await db.create_database()
-    return db
 
 
 @pytest.fixture(scope="module")

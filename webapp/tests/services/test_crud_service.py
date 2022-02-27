@@ -5,7 +5,6 @@ from webapp.services.database import Database
 from webapp.containers import Container
 import pytest
 from dependency_injector.wiring import Provide, inject
-from dependency_injector import providers
 from logging import getLogger
 from logging import config
 
@@ -16,16 +15,6 @@ config.fileConfig('logging.conf', disable_existing_loggers=False)
 
 
 logger = getLogger(__name__)
-
-
-@pytest.fixture(autouse=True, scope="module")
-async def database():
-    container = Container()
-    container.db.override(providers.Singleton(
-        Database, db_url="postgresql+asyncpg://taiharry:123456@localhost:5432/testAcDB"))
-    db = container.db()
-    await db.create_database()
-    return db
 
 
 @pytest.fixture(scope="module")
