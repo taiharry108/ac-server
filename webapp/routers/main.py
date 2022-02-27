@@ -1,9 +1,12 @@
+from collections import defaultdict
+from email.policy import default
 import json
 from logging import getLogger
-from typing import Dict, List, Tuple, Union
+from typing import AsyncGenerator, Dict, List, Tuple, Union
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import true
 from webapp.containers import Container
 
 from dependency_injector.wiring import inject, Provider, Provide
@@ -20,7 +23,7 @@ from webapp.services.crud_service import CRUDService
 
 from webapp.models.db_models import Manga as DBManga, MangaSite as DBMangaSite
 from webapp.models.db_models import Chapter as DBChapter, Page as DBPage, Anime as DBAnime, Episode as DBEpisode
-from webapp.services.download_service import DownloadService
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter()
 
@@ -28,16 +31,36 @@ router = APIRouter()
 logger = getLogger(__name__)
 
 
-def save_chapters(crud_service: CRUDService, chapters: List[Chapter], manga_id: int, index_type: MangaIndexTypeEnum) -> bool:
-    chapters = [
-        {
-            "title": chapter.title,
-            "page_url": str(chapter.page_url),
-            "manga_id": manga_id,
-            "type": index_type.value
-        } for chapter in chapters]
-    return crud_service.bulk_create_objs_with_unique_key(
-        DBChapter, chapters, "page_url")
+async def save_chapters(crud_service: CRUDService, session: AsyncSession, manga_id: int, manga: Manga) -> List[DBChapter]:
+    all_chapters = []
+    page_url_dict = {}
+    for index_type in manga.chapters:
+        chapters = manga.chapters[index_type]
+        all_chapters += [
+            {
+                "title": chapter.title,
+                "page_url": str(chapter.page_url),
+                "manga_id": manga_id,
+                "type": index_type.value
+            } for chapter in chapters]
+        for chapter in chapters:
+            page_url_dict[chapter.page_url] = index_type
+        
+    logger.info(f"going to save chapter {len(all_chapters)=}")
+
+    db_chapters = await crud_service.bulk_create_objs_with_unique_key(session,
+                                                                      DBChapter,
+                                                                      all_chapters,
+                                                                      "page_url",
+                                                                      auto_commit=False)
+    
+    db_chapter_dict = defaultdict(list)
+
+    for db_chapter in db_chapters:
+        page_url = db_chapter.page_url
+        db_chapter_dict[page_url_dict[page_url]].append(db_chapter)
+
+    return db_chapter_dict
 
 
 def save_episodes(crud_service: CRUDService, episodes: List[Episode], anime_id: int) -> bool:
@@ -155,21 +178,24 @@ async def search_manga(site: MangaSiteEnum,
                        search_keyword: str,
                        scraping_service_factory: providers.FactoryAggregate = Depends(
                            Provider[Container.scraping_service_factory]),
-                       crud_service: CRUDService = Depends(Provide[Container.crud_service])):
+                       crud_service: CRUDService = Depends(
+                           Provide[Container.crud_service])):
 
     scraping_service: AbstractMangaSiteScrapingService = scraping_service_factory(
         site)
     mangas = await scraping_service.search_manga(search_keyword)
+    async with crud_service.database.session() as session:
+        async with session.begin():
+            manga_site_id = await crud_service.get_id_by_attr(
+                session,
+                DBMangaSite,
+                "name",
+                site.value
+            )
 
-    manga_site_id = crud_service.get_id_by_attr(
-        DBMangaSite, "name", site.value)
-
-    all_urls = [manga.url for manga in mangas]
-    mangas = [{"name": manga.name, "url": str(manga.url), "manga_site_id": manga_site_id}
-              for manga in mangas]
-    crud_service.bulk_create_objs_with_unique_key(DBManga, mangas, "url")
-
-    return crud_service.get_items_by_attr(DBManga, "url", all_urls)
+            mangas = [{"name": manga.name, "url": str(manga.url), "manga_site_id": manga_site_id}
+                      for manga in mangas]
+            return await crud_service.bulk_create_objs_with_unique_key(session, DBManga, mangas, "url")
 
 
 @router.get("/anime_index/{site}/{anime_id}")
@@ -203,36 +229,36 @@ async def get_index(site: MangaSiteEnum,
 
     scraping_service: AbstractMangaSiteScrapingService = scraping_service_factory(
         site)
-    db_manga = crud_service.get_item_by_id(DBManga, manga_id)
 
-    if db_manga is None:
-        raise HTTPException(
-            status_code=status.HTTP_406_NOT_ACCEPTABLE,
-            detail="Manga does not exist"
-        )
+    async with crud_service.database.session() as session:
+        async with session.begin():
+            db_manga = await crud_service.get_item_by_id(session, DBManga, manga_id)
 
-    manga = Manga(name=db_manga.name, url=db_manga.url, id=db_manga.id)
+            if db_manga is None:
+                raise HTTPException(
+                    status_code=status.HTTP_406_NOT_ACCEPTABLE,
+                    detail="Manga does not exist"
+                )
 
-    manga = await scraping_service.get_index_page(manga)
+            manga = Manga(name=db_manga.name, url=db_manga.url, id=db_manga.id)
 
-    for index_type in manga.chapters:
-        chapters = manga.chapters[index_type]
-        page_urls = [chapter.page_url for chapter in chapters]
-        logger.info(f"going to save chapter {index_type=}")
-        save_chapters(crud_service, chapters, manga_id, index_type)
+            manga = await scraping_service.get_index_page(manga)
 
-        manga.chapters[index_type] = crud_service.get_items_by_attr(
-            DBChapter, "page_url", page_urls)
+            db_chapter_dict = await save_chapters(crud_service, session, manga_id, manga)
+            for index_type in db_chapter_dict:
+                manga.chapters[index_type] = db_chapter_dict[index_type]
 
-    meta_data = {
-        "last_update": manga.last_update,
-        "finished": manga.finished,
-        "thum_img": manga.thum_img
-    }
 
-    crud_service.update_object(DBManga, manga_id, **meta_data)
+            meta_data = {
+                # "last_update": manga.last_update,
+                "finished": manga.finished,
+                "thum_img": manga.thum_img
+            }
 
-    return manga
+            await crud_service.update_object(session, DBManga, manga_id, **meta_data, auto_commit=False)
+            await session.commit()
+
+            return manga
 
 
 @router.get("/episode/{site}/{episode_id}")

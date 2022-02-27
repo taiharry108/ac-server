@@ -165,10 +165,13 @@ class CRUDService:
             await session.commit()
         return result
 
-    async def bulk_create_objs_with_unique_key(self, session: Session, orm_obj_type: Type[T], items: List[Dict], unique_key: str, update_attrs: List[str] = {}) -> bool:
+    async def bulk_create_objs_with_unique_key(self, session: Session, orm_obj_type: Type[T],
+                                               items: List[Dict], unique_key: str, auto_commit: bool = True,
+                                               update_attrs: List[str] = {}) -> List[T]:
         """Bulk create jobs, but check if a value exsists for a unique key"""
+        ordered_values = [item[unique_key] for item in items]
         db_items = await self.get_items_by_attr(session,
-                                                orm_obj_type, unique_key, [item[unique_key] for item in items])
+                                                orm_obj_type, unique_key, ordered_values)
 
         existing_unique_keys = set(getattr(db_item, unique_key)
                                    for db_item in db_items)
@@ -190,7 +193,9 @@ class CRUDService:
         # filter out items that already exist
         items = [item for item in items if not item[unique_key]
                  in existing_unique_keys]
-        return await self.bulk_create_objs(session, orm_obj_type, items)
+        new_db_items = await self.bulk_create_objs(session, orm_obj_type, items, auto_commit)
+        result_db_items = db_items + new_db_items
+        return rearrange_items(ordered_values, result_db_items, unique_key, True)
 
     async def _update_object(self, session: Session, orm_obj_type: Type[T], id: int, auto_commit: bool = True, **kwargs) -> Union[T, None]:
         q = select(orm_obj_type).where(getattr(orm_obj_type, "id") == id)

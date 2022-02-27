@@ -17,7 +17,7 @@ from webapp.services.database import Database
 
 from webapp.services.secruity_service import SecurityService
 from webapp.services.user_service import UserService
-from webapp.tests.utils import delete_all
+from webapp.tests.utils import delete_all, delete_dependent_tables
 
 logger = getLogger(__name__)
 
@@ -225,19 +225,26 @@ async def update_history(chap_id: int,
 @router.delete("/all")
 @inject
 async def delete_all_data(database: Database = Depends(Provide[Container.db])):
-    with database.session() as session:
-        delete_all(session)
+    async with database.session() as session:
+        async with session.begin():
+            await delete_all(session)
+            await session.commit()
+
+    async with database.session() as session:
+        async with session.begin():
+            await delete_dependent_tables(session)
+            await session.commit()
     return {"success": 200}
 
 
 @router.post("/init")
 @inject
 async def init_data(database: Database = Depends(Provide[Container.db])):
-    with database.session() as session:
-        site = MangaSite(name="manhuaren", url="https://www.manhuaren.com")
-        session.add(site)
-        site = MangaSite(name="anime1", url="https://anime1.me/")
-        session.add(site)
-        session.commit()
+    async with database.session() as session:
+        async with session.begin():
+            session.add(MangaSite(name="manhuaren",
+                        url="https://www.manhuaren.com"))
+            session.add(MangaSite(name="anime1", url="https://anime1.me/"))
+            await session.commit()
 
     return {"success": 200}

@@ -159,8 +159,9 @@ async def test_bulk_create_objs_with_unique_key(crud_service: CRUDService, manga
     items = [{"name": manga_name, "url": manga_url}, {"name":manga_name, "url": manga_url + "another"}]
 
     db_items = await crud_service.bulk_create_objs_with_unique_key(session, Manga, items, "url")
-    assert len(db_items) == 1
-    assert db_items[0].url == manga_url + "another"
+    assert len(db_items) == 2
+    assert db_items[0].url == manga_url
+    assert db_items[1].url == manga_url + "another"
 
 
 async def test_add_item_to_obj(crud_service: CRUDService, session: AsyncSession, manga_url: str):
