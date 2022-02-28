@@ -1,12 +1,11 @@
 from collections import defaultdict
-from email.policy import default
 import json
 from logging import getLogger
-from typing import AsyncIterable, Dict, List, Tuple, Union
+from types import AsyncGeneratorType
+from typing import Dict, List, Tuple, Union
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi import status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import true
 from webapp.containers import Container
 
 from dependency_injector.wiring import inject, Provider, Provide
@@ -15,8 +14,8 @@ from webapp.models.anime import Anime
 from webapp.models.episode import Episode
 from webapp.models.chapter import Chapter
 from webapp.models.manga import Manga, MangaBase
-from webapp.models.manga_index_type_enum import MangaIndexTypeEnum
 from webapp.models.manga_site_enum import MangaSiteEnum
+from webapp.routers import get_session
 from webapp.services.abstract_anime_site_scraping_service import AbstractAnimeSiteScrapingService
 from webapp.services.abstract_manga_site_scraping_service import AbstractMangaSiteScrapingService
 from webapp.services.crud_service import CRUDService
@@ -63,7 +62,7 @@ async def save_chapters(crud_service: CRUDService, session: AsyncSession, manga_
     return db_chapter_dict
 
 
-def save_episodes(crud_service: CRUDService, episodes: List[Episode], anime_id: int) -> bool:
+async def save_episodes(session: AsyncSession, crud_service: CRUDService, episodes: List[Episode], anime_id: int) -> List[DBEpisode]:
     episodes = [{
         "title": ep.title,
         "data": ep.data,
@@ -72,16 +71,18 @@ def save_episodes(crud_service: CRUDService, episodes: List[Episode], anime_id: 
         "manual_key": f"{anime_id}:{ep.title}"
     } for ep in episodes]
 
-    return crud_service.bulk_create_objs_with_unique_key(
-        DBEpisode, episodes, "manual_key", ["data"])
+
+    return await crud_service.bulk_create_objs_with_unique_key(
+        session, DBEpisode, episodes, "manual_key", True, ["data"])
 
 
-async def update_episode(db_anime: DBAnime,
+async def update_episode(session: AsyncSession,
+                         db_anime: DBAnime,
                          scraping_service: AbstractAnimeSiteScrapingService,
-                         crud_service: CRUDService):
+                         crud_service: CRUDService) -> List[DBEpisode]:
     anime = Anime.from_orm(db_anime)
     eps = await scraping_service.get_index_page(anime)
-    save_episodes(crud_service, eps, db_anime.id)
+    return await save_episodes(session, crud_service, eps, db_anime.id)
 
 
 async def save_pages(session: AsyncSession, crud_service: CRUDService, pages: List[Dict], chapter_id: int) -> bool:
@@ -107,13 +108,13 @@ async def get_chapter_precheck(session: AsyncSession, chapter_id: int, crud_serv
     return db_chapter, db_manga
 
 
-def get_episode_precheck(episode_id: int, crud_service: CRUDService) -> Tuple[DBChapter, DBManga]:
-    db_ep = crud_service.get_item_by_id(DBEpisode, episode_id)
+async def get_episode_precheck(session: AsyncSession, episode_id: int, crud_service: CRUDService) -> Tuple[DBChapter, DBManga]:
+    db_ep = await crud_service.get_item_by_id(session, DBEpisode, episode_id)
 
     if not db_ep:
         return None, None
 
-    db_anime = crud_service.get_item_by_id(DBAnime, db_ep.anime_id)
+    db_anime = await crud_service.get_item_by_id(session, DBAnime, db_ep.anime_id)
     return db_ep, db_anime
 
 
@@ -147,12 +148,6 @@ async def create_stream_response(session: AsyncSession,
     return StreamingResponse(img_gen(), media_type="text/event-stream")
 
 
-@inject
-async def get_session(crud_service: CRUDService = Depends(
-        Provide[Container.crud_service])) -> AsyncSession:
-    async with crud_service.database.session() as session:
-        async with session.begin():
-            yield session
 
 
 @router.get("/search_anime/{site}/{search_keyword}", response_model=List[Anime])
@@ -161,14 +156,16 @@ async def search_anime(site: MangaSiteEnum,
                        search_keyword: str,
                        scraping_service_factory: providers.FactoryAggregate = Depends(
                            Provider[Container.scraping_service_factory]),
-                       crud_service: CRUDService = Depends(Provide[Container.crud_service])):
+                       crud_service: CRUDService = Depends(
+                           Provide[Container.crud_service]),
+                       session_iter: AsyncGeneratorType[AsyncSession] = Depends(get_session)):
     scraping_service: AbstractAnimeSiteScrapingService = scraping_service_factory(
         site)
-    site_id = crud_service.get_id_by_attr(
-        DBMangaSite, "name", site.value)
+    session = await session_iter.__anext__()
+    site_id = await crud_service.get_id_by_attr(
+        session, DBMangaSite, "name", site.value)
     animes = await scraping_service.search_anime(search_keyword)
 
-    all_urls = [anime.url for anime in animes]
     animes = [
         {
             "name": anime.name, "url": str(anime.url), "manga_site_id": site_id,
@@ -176,9 +173,7 @@ async def search_anime(site: MangaSiteEnum,
             "year": anime.year
         }
         for anime in animes]
-    crud_service.bulk_create_objs_with_unique_key(DBAnime, animes, "url")
-    db_animes = crud_service.get_items_by_attr(DBAnime, "url", all_urls)
-    return db_animes
+    return await crud_service.bulk_create_objs_with_unique_key(session, DBAnime, animes, "url")
 
 
 @router.get("/search/{site}/{search_keyword}", response_model=List[MangaBase])
@@ -189,7 +184,7 @@ async def search_manga(site: MangaSiteEnum,
                            Provider[Container.scraping_service_factory]),
                        crud_service: CRUDService = Depends(
                            Provide[Container.crud_service]),
-                       session_iter: AsyncIterable[AsyncSession] = Depends(get_session)):
+                       session_iter: AsyncGeneratorType[AsyncSession] = Depends(get_session)):
 
     scraping_service: AbstractMangaSiteScrapingService = scraping_service_factory(
         site)
@@ -214,19 +209,20 @@ async def get_anime_index(site: MangaSiteEnum,
                           anime_id: int,
                           scraping_service_factory: providers.FactoryAggregate = Depends(
                               Provider[Container.scraping_service_factory]),
-                          crud_service: CRUDService = Depends(Provide[Container.crud_service])) -> List[Episode]:
+                          crud_service: CRUDService = Depends(
+                              Provide[Container.crud_service]),
+                          session_iter: AsyncGeneratorType[AsyncSession] = Depends(get_session)) -> List[Episode]:
     scraping_service: AbstractAnimeSiteScrapingService = scraping_service_factory(
         site)
-
-    db_anime = crud_service.get_item_by_id(DBAnime, anime_id)
+    session = await session_iter.__anext__()
+    db_anime = await crud_service.get_item_by_id(session, DBAnime, anime_id)
 
     if db_anime is None:
         raise HTTPException(
             status_code=status.HTTP_406_NOT_ACCEPTABLE,
             detail="Anime does not exist"
         )
-    await update_episode(db_anime, scraping_service, crud_service)
-    return crud_service.get_items_by_same_attr(DBEpisode, "anime_id", anime_id)
+    return await update_episode(session, db_anime, scraping_service, crud_service)
 
 
 @router.get('/index/{site}/{manga_id}')
@@ -237,7 +233,7 @@ async def get_index(site: MangaSiteEnum,
                         Provider[Container.scraping_service_factory]),
                     crud_service: CRUDService = Depends(
                         Provide[Container.crud_service]),
-                    session_iter: AsyncIterable[AsyncSession] = Depends(get_session)) -> Manga:
+                    session_iter: AsyncGeneratorType[AsyncSession] = Depends(get_session)) -> Manga:
 
     scraping_service: AbstractMangaSiteScrapingService = scraping_service_factory(
         site)
@@ -278,12 +274,15 @@ async def get_episode(site: MangaSiteEnum,
                       episode_id: int,
                       scraping_service_factory: providers.FactoryAggregate = Depends(
                           Provider[Container.scraping_service_factory]),
-                      crud_service: CRUDService = Depends(Provide[Container.crud_service])):
+                      crud_service: CRUDService = Depends(Provide[Container.crud_service]),
+                      session_iter: AsyncGeneratorType[AsyncSession] = Depends(get_session)):
+
+    session = await session_iter.__anext__()
     scraping_service: AbstractAnimeSiteScrapingService = scraping_service_factory(
         site)
 
-    db_ep, db_anime = get_episode_precheck(
-        episode_id, crud_service)
+    db_ep, db_anime = await get_episode_precheck(
+        session, episode_id, crud_service)
 
     if not db_anime or not db_ep:
         raise HTTPException(
@@ -291,7 +290,7 @@ async def get_episode(site: MangaSiteEnum,
             detail="Anime or Episode does not exist"
         )
 
-    await update_episode(db_anime, scraping_service, crud_service)
+    await update_episode(session, db_anime, scraping_service, crud_service)
 
     async for result in scraping_service.download_episode(Anime.from_orm(db_anime), Episode.from_orm(db_ep)):
         return result
@@ -305,7 +304,7 @@ async def get_chapter(site: MangaSiteEnum,
                           Provider[Container.scraping_service_factory]),
                       crud_service: CRUDService = Depends(
                           Provide[Container.crud_service]),
-                      session_iter: AsyncIterable[AsyncSession] = Depends(get_session)):
+                      session_iter: AsyncGeneratorType[AsyncSession] = Depends(get_session)):
     session = await session_iter.__anext__()
     pages = await crud_service.get_items_by_same_attr(
         session, DBPage, "chapter_id", chapter_id, "idx")

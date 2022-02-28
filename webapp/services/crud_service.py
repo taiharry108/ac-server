@@ -167,8 +167,8 @@ class CRUDService:
 
     async def bulk_create_objs_with_unique_key(self, session: Session, orm_obj_type: Type[T],
                                                items: List[Dict], unique_key: str, auto_commit: bool = True,
-                                               update_attrs: List[str] = {}) -> List[T]:
-        """Bulk create jobs, but check if a value exsists for a unique key"""
+                                               update_attrs: List[str] = None) -> List[T]:
+        """Bulk create jobs, but check if a value exsists for a unique key"""            
         ordered_values = [item[unique_key] for item in items]
         db_items = await self.get_items_by_attr(session,
                                                 orm_obj_type, unique_key, ordered_values)
@@ -176,19 +176,16 @@ class CRUDService:
         existing_unique_keys = set(getattr(db_item, unique_key)
                                    for db_item in db_items)
 
-        # if update_attrs:
-        #     existing_items = {
-        #         item[unique_key]: item for item in items if item[unique_key] in existing_unique_keys}
-        #     db_items = {getattr(db_item, unique_key)
-        #                         : db_item for db_item in db_items}
-
-        #     async with self.database.session() as session:
-        #         async with session.begin():
-        #             logger.info(
-        #                 f"going to update existing items for {update_attrs}")
-
-        #             [self._update_object(session, orm_obj_type, db_items[item_key].id, **{attr_name: item[attr_name] for attr_name in update_attrs})
-        #             for item_key, item in existing_items.items()]
+        if update_attrs:
+            item_dict = {
+                item[unique_key]: item for item in items if item[unique_key] in existing_unique_keys}
+            db_item_dict = {getattr(db_item, unique_key)
+                                : db_item for db_item in db_items}
+            for key in db_item_dict:
+                db_item = db_item_dict[key]
+                item = item_dict[key]
+                for attr_name in update_attrs:
+                    setattr(db_item, attr_name, item[attr_name])
 
         # filter out items that already exist
         items = [item for item in items if not item[unique_key]

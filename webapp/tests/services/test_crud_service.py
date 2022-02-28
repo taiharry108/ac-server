@@ -31,14 +31,13 @@ async def session(crud_service: CRUDService) -> AsyncSession:
             yield session
 
 
-
 @pytest.fixture(autouse=True, scope="module")
 async def run_before_and_after_tests(database: Database):
     async with database.session() as session:
         async with session.begin():
             await delete_all(session)
             await session.commit()
-    
+
     async with database.session() as session:
         async with session.begin():
             await delete_dependent_tables(session)
@@ -46,28 +45,31 @@ async def run_before_and_after_tests(database: Database):
             db_manga_site = MangaSite(
                 name='manhuaren',
                 url='https://www.manhuaren.com/')
-            
+
             session.add(db_manga_site)
             user = User(email="taiharry108@gmail.com", hashed_password="12345")
             manga = Manga(name="Test Manga", url="https://example.com/manga")
             session.add(user)
             session.add(manga)
-            
+
             await session.commit()
     async with database.session() as session:
         async with session.begin():
             title = "Test Title"
             page_urls = [f"https://example.com/{i}" for i in range(10)]
             logger.info(f'{manga.id=}')
-            chapters = [Chapter(**{'title': title, 'page_url': page_url, 'manga_id':manga.id}) for page_url in page_urls]
+            chapters = [Chapter(**{'title': title, 'page_url': page_url,
+                                'manga_id': manga.id}) for page_url in page_urls]
 
             session.add_all(chapters)
             await session.commit()
     yield
 
+
 @pytest.fixture
 def manga_name() -> str:
     return "Test Manga"
+
 
 @pytest.fixture
 def manga_url() -> str:
@@ -77,7 +79,7 @@ def manga_url() -> str:
 @pytest.fixture
 async def manga_site_id(crud_service: CRUDService, session: AsyncSession):
     site = MangaSiteEnum.ManHuaRen
-    return await crud_service.get_id_by_attr(session, MangaSite, "name", site.value)    
+    return await crud_service.get_id_by_attr(session, MangaSite, "name", site.value)
 
 
 async def test_get_item_by_attrs(crud_service: CRUDService, session: AsyncSession):
@@ -97,6 +99,7 @@ async def test_get_item_by_id_not_exists(crud_service: CRUDService, session: Asy
     db_mangasite = await crud_service.get_item_by_id(session, MangaSite, 99999)
     assert db_mangasite is None
 
+
 async def test_get_id_by_attr(crud_service: CRUDService, session: AsyncSession):
     site = MangaSiteEnum.ManHuaRen
     manga_site_id = await crud_service.get_id_by_attr(session, MangaSite, "name", site.value)
@@ -108,11 +111,11 @@ async def test_get_items_by_attr(crud_service: CRUDService, session: AsyncSessio
     db_mangas = await crud_service.get_items_by_attr(session, MangaSite, "url", urls)
     assert len(db_mangas) == 1
     assert db_mangas[0].url == urls[0]
-    
+
 
 async def test_create_manga(crud_service: CRUDService, manga_site_id: int, manga_name: str, manga_url: str, session: AsyncSession):
     db_manga = await crud_service.create_obj(session, Manga, name=manga_name,
-                                       url=manga_url, manga_site_id=manga_site_id)    
+                                             url=manga_url, manga_site_id=manga_site_id)
     assert isinstance(db_manga, Manga)
     assert db_manga.name == manga_name
     assert db_manga.url == manga_url
@@ -156,12 +159,24 @@ async def test_update_values_failed_wrong_attr(crud_service: CRUDService, manga_
 
 
 async def test_bulk_create_objs_with_unique_key(crud_service: CRUDService, manga_name: str, manga_url: str, session: AsyncSession):
-    items = [{"name": manga_name, "url": manga_url}, {"name":manga_name, "url": manga_url + "another"}]
+    items = [{"name": manga_name, "url": manga_url}, {
+        "name": manga_name, "url": manga_url + "another"}]
 
     db_items = await crud_service.bulk_create_objs_with_unique_key(session, Manga, items, "url")
     assert len(db_items) == 2
     assert db_items[0].url == manga_url
     assert db_items[1].url == manga_url + "another"
+
+
+async def test_bulk_create_objs_with_unique_key_with_update(crud_service: CRUDService, manga_name: str, manga_url: str, session: AsyncSession):
+    items = [{"name": manga_name, "url": manga_url, "thum_img": "test1.png"}, {
+        "name": manga_name, "url": manga_url + "another", "thum_img": "test2.png"}]
+    db_items = await crud_service.bulk_create_objs_with_unique_key(session, Manga, items, "url", update_attrs=["thum_img"])
+    assert len(db_items) == 2
+    assert db_items[0].url == manga_url
+    assert db_items[1].url == manga_url + "another"
+    assert db_items[0].thum_img == 'test1.png'
+    assert db_items[1].thum_img == 'test2.png'
 
 
 async def test_add_item_to_obj(crud_service: CRUDService, session: AsyncSession, manga_url: str):
@@ -207,4 +222,3 @@ async def test_get_items_by_ids(crud_service: CRUDService, session: AsyncSession
     chap_ids = [chap.id for chap in db_chapters]
     db_chapters2 = await crud_service.get_items_by_ids(session, Chapter, chap_ids, False)
     assert len(db_chapters) == len(db_chapters2)
-

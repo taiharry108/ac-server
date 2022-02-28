@@ -20,14 +20,14 @@ class UserService:
     crud_service: CRUDService
     security_service: SecurityService
 
-    async def add_fav(self, session: AsyncSession,  manga_id: int, user_id: int) -> bool:
+    async def add_fav(self, session: AsyncSession,  manga_id: int, user_id: int) -> DBUser:
         return await self.crud_service.add_item_to_obj(session, DBUser, DBManga, user_id, manga_id, "fav_mangas")
 
-    async def remove_fav(self, session: AsyncSession,  manga_id: int, user_id: int) -> bool:
+    async def remove_fav(self, session: AsyncSession,  manga_id: int, user_id: int) -> DBUser:
         return await self.crud_service.remove_item_from_obj(session, DBUser, DBManga, user_id, manga_id, "fav_mangas")
 
     async def get_fav(self, session: AsyncSession,  user_id: int) -> List[DBManga]:
-        return await self.crud_service.get_attr_of_item_by_id(session, DBUser, user_id, "fav_mangas")
+        return await self.crud_service.get_attr_of_item_by_id(session, DBUser, user_id, "fav_mangas", "fav_mangas")
 
     async def get_history(self, session: AsyncSession,  user_id: int) -> List[DBHistory]:
         return await self.crud_service.get_attr_of_item_by_id(session, DBUser, user_id, "history_mangas", "history_mangas")
@@ -53,11 +53,14 @@ class UserService:
             if db_hist is not None:
                 await session.delete(db_hist)
                 await session.commit()
-            return True
+                return True
+            else:
+                return False
 
         return await self.crud_service.item_obj_iteraction(session, DBUser, DBManga, user_id, manga_id, work)
 
-    async def update_history(self, session: AsyncSession,  manga_id: int, chap_id: int, user_id: int):
+    async def update_history(self, session: AsyncSession, chap_id: int, user_id: int):
+        manga_id = await self.crud_service.get_attr_of_item_by_id(session, DBChapter, chap_id, "manga_id")
         async def work(session, db_user, db_manga):
             q = select(DBHistory).where(DBHistory.manga_id ==
                                         manga_id).where(DBHistory.user_id == user_id)
@@ -105,7 +108,7 @@ class UserService:
                         hashed_password=db_user.hashed_password)
 
     async def get_user_id(self, session: AsyncSession,  username: str) -> int:
-        return self.crud_service.get_id_by_attr(DBUser, "email", username)
+        return await self.crud_service.get_id_by_attr(session, DBUser, "email", username)
 
     async def create_user(self, session: AsyncSession,  username: str, password: str) -> Optional[DBUser]:
         if await self.get_user(session, username):
