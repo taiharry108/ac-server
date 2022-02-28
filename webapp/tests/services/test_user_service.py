@@ -68,9 +68,15 @@ async def run_before_and_after_tests(database: Database, username: str, password
         async with session.begin():
             await delete_dependent_tables(session)
             session.add(DBUser(email=username, hashed_password=password))
-            session.add(DBManga(name=manga.name, url=manga.url))
+            db_manga = DBManga(name=manga.name, url=manga.url)
+            session.add(db_manga)
+            await session.commit()
+    
+    async with database.session() as session:
+        async with session.begin():
             session.add(DBChapter(title="Test title",
-                        page_url=chapter_url))
+                        page_url=chapter_url,
+                        manga_id=db_manga.id))
             await session.commit()
 
     yield
@@ -160,13 +166,12 @@ async def test_add_history_twice(user_service: UserService,
 
 
 async def test_update_history(user_service: UserService,
-                              manga_id: int,
                               session: AsyncSession,
                               db_user: DBUser,
                               chapter_id: int):
     user_id = db_user.id
 
-    assert await user_service.update_history(session, manga_id, chapter_id, user_id)
+    assert await user_service.update_history(session, chapter_id, user_id)
 
 
 async def test_get_history(user_service: UserService,
