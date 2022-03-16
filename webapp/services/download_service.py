@@ -85,9 +85,8 @@ class DownloadService:
         limits = Limits(max_connections=max_connections,
                         max_keepalive_connections=max_keepalive_connections)
         logger.info(proxy)
-        proxies = f"socks5://{proxy['username']}:{proxy['password']}@{proxy['server']}:{proxy['port']}"
         self.client = AsyncClient(
-            limits=limits, timeout=5, verify=False, proxies=proxies)
+            limits=limits, timeout=5, verify=False)
 
         self.headers = headers
         self.store_service: AbstractStoreService = store_service_factory(store)

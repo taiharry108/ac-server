@@ -76,7 +76,8 @@ class S3StoreService(AbstractStoreService):
         key_name = f'{self.prefix}{path}'
         url = f's3://{self.bucket}/{key_name}'
         logger.info(f"{key_name=}, {url=}")
-        with open(url, 'wb', transport_params={'client': self.s3_client}) as f:
+
+        with open(url, 'wb', transport_params={'client': self.s3_client, 'min_part_size': 5 * 1024**2}) as f:
             async for data in async_iter:
                 await run_in_executor(f.write)(data)
         
