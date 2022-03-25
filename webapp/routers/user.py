@@ -1,4 +1,5 @@
 from datetime import timedelta
+from types import AsyncGeneratorType
 from typing import List, Optional, Set
 from fastapi import APIRouter, Depends, Form, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -17,7 +18,10 @@ from webapp.services.database import Database
 
 from webapp.services.secruity_service import SecurityService
 from webapp.services.user_service import UserService
-from webapp.tests.utils import delete_all
+from webapp.tests.utils import delete_all, delete_dependent_tables
+from webapp.routers import get_session
+from sqlalchemy.ext.asyncio import AsyncSession
+
 
 logger = getLogger(__name__)
 
@@ -29,8 +33,10 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="user/token")
 @router.post("/signup", response_model=User)
 @inject
 async def signup(user_service: UserService = Depends(Provide[Container.user_service]),
-                 username: str = Form(...), password: str = Form(...)):
-    db_user = user_service.create_user(username, password)
+                 username: str = Form(...), password: str = Form(...),
+                 session_iter: AsyncGeneratorType[AsyncSession] = Depends(get_session)):
+    session = await session_iter.__anext__()
+    db_user = await user_service.create_user(session, username, password)
 
     if not db_user:
         raise HTTPException(
@@ -46,8 +52,10 @@ async def signup(user_service: UserService = Depends(Provide[Container.user_serv
 async def login_for_access_token(user_service: UserService = Depends(Provide[Container.user_service]),
                                  security_service: SecurityService = Depends(
                                      Provide[Container.security_service]),
-                                 form_data: OAuth2PasswordRequestForm = Depends()):
-    db_user = user_service.get_user(form_data.username)
+                                 form_data: OAuth2PasswordRequestForm = Depends(),
+                                 session_iter: AsyncGeneratorType[AsyncSession] = Depends(get_session)):
+    session = await session_iter.__anext__()
+    db_user = await user_service.get_user(session, form_data.username)
     user = security_service.authenticate_user(
         db_user, form_data.password)
     if not user:
@@ -68,7 +76,9 @@ async def login_for_access_token(user_service: UserService = Depends(Provide[Con
 async def get_current_user(user_service: UserService = Depends(Provide[Container.user_service]),
                            security_service: SecurityService = Depends(
                                Provide[Container.security_service]),
-                           token: str = Depends(oauth2_scheme)):
+                           token: str = Depends(oauth2_scheme),
+                           session_iter: AsyncGeneratorType[AsyncSession] = Depends(get_session)):
+    session = await session_iter.__anext__()
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -82,8 +92,8 @@ async def get_current_user(user_service: UserService = Depends(Provide[Container
         token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
-    user = user_service.get_user(username=token_data.username)
-    user_id = user_service.get_user_id(token_data.username)
+    user = await user_service.get_user(session, username=token_data.username)
+    user_id = await user_service.get_user_id(session, token_data.username)
     if user is None:
         raise credentials_exception
     return user, user_id
@@ -99,15 +109,19 @@ def create_manga_simple(manga: DBManga, chapter: Optional[DBChapter], fav_manga_
 
 @inject
 async def get_fav_manga_ids(current_user: User = Depends(get_current_user),
-                            user_service: UserService = Depends(Provide[Container.user_service])) -> Set[int]:
+                            user_service: UserService = Depends(
+                                Provide[Container.user_service]),
+                            session_iter: AsyncGeneratorType[AsyncSession] = Depends(get_session)) -> Set[int]:
+    session = await session_iter.__anext__()
     _, user_id = current_user
-    fav_mangas = user_service.get_fav(user_id)
+    fav_mangas = await user_service.get_fav(session, user_id)
     return set(manga.id for manga in fav_mangas)
 
 
 @router.get("/me", response_model=User)
 async def read_users_me(current_user: User = Depends(get_current_user)):
-    return current_user
+    logger.info(current_user)
+    return current_user[0]
 
 
 @router.get("/fav")
@@ -117,13 +131,15 @@ async def get_fav(current_user: User = Depends(get_current_user),
                       Provide[Container.crud_service]),
                   user_service: UserService = Depends(
                       Provide[Container.user_service]),
-                  fav_manga_ids: Set[int] = Depends(get_fav_manga_ids)):
+                  fav_manga_ids: Set[int] = Depends(get_fav_manga_ids),
+                  session_iter: AsyncGeneratorType[AsyncSession] = Depends(get_session)):
+    session = await session_iter.__anext__()
     _, user_id = current_user
-    history = user_service.get_history(user_id)
-    db_mangas = crud_service.get_items_by_ids(
-        DBManga, [h.manga_id for h in history if h.manga_id in fav_manga_ids])
-    db_chapters = crud_service.get_items_by_ids(
-        DBChapter, [h.chaper_id for h in history if h.manga_id in fav_manga_ids], keep_none=True
+    history = await user_service.get_history(session, user_id)
+    db_mangas = await crud_service.get_items_by_ids(
+        session, DBManga, [h.manga_id for h in history if h.manga_id in fav_manga_ids])
+    db_chapters = await crud_service.get_items_by_ids(
+        session, DBChapter, [h.chaper_id for h in history if h.manga_id in fav_manga_ids], keep_none=True
     )
     return [create_manga_simple(manga, chapter, fav_manga_ids)
             for manga, chapter in zip(db_mangas, db_chapters)]
@@ -136,14 +152,16 @@ async def get_history(current_user: User = Depends(get_current_user),
                           Provide[Container.user_service]),
                       crud_service: CRUDService = Depends(
                           Provide[Container.crud_service]),
-                      fav_manga_ids: Set[int] = Depends(get_fav_manga_ids)):
+                      fav_manga_ids: Set[int] = Depends(get_fav_manga_ids),
+                      session_iter: AsyncGeneratorType[AsyncSession] = Depends(get_session)):
 
+    session = await session_iter.__anext__()
     _, user_id = current_user
-    history = user_service.get_history(user_id)
-    db_mangas = crud_service.get_items_by_ids(
-        DBManga, [h.manga_id for h in history])
-    db_chapters = crud_service.get_items_by_ids(
-        DBChapter, [h.chaper_id for h in history], keep_none=True
+    history = await user_service.get_history(session, user_id)
+    db_mangas = await crud_service.get_items_by_ids(
+        session, DBManga, [h.manga_id for h in history])
+    db_chapters = await crud_service.get_items_by_ids(
+        session, DBChapter, [h.chaper_id for h in history], keep_none=True
     )
     return [create_manga_simple(manga, chapter, fav_manga_ids)
             for manga, chapter in zip(db_mangas, db_chapters)]
@@ -155,11 +173,12 @@ async def get_latest_chap(manga_id: int,
                           current_user: User = Depends(get_current_user),
                           user_service: UserService = Depends(
                               Provide[Container.user_service]),
-                          crud_service: CRUDService = Depends(
-                              Provide[Container.crud_service]),
+                          session_iter: AsyncGeneratorType[AsyncSession] = Depends(
+                              get_session),
                           ):
+    session = await session_iter.__anext__()
     _, user_id = current_user
-    db_chap = user_service.get_latest_chap(user_id, manga_id)
+    db_chap = await user_service.get_latest_chap(session, user_id, manga_id)
     if not db_chap:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -174,9 +193,14 @@ async def add_fav(manga_id: int,
                   current_user: User = Depends(get_current_user),
                   user_service: UserService = Depends(
                       Provide[Container.user_service]),
+                  session_iter: AsyncGeneratorType[AsyncSession] = Depends(
+                      get_session)
                   ):
+    session = await session_iter.__anext__()
     _, user_id = current_user
-    return {"success": user_service.add_fav(manga_id, user_id)}
+    db_user = await user_service.add_fav(session, manga_id, user_id)
+    result = True if db_user else False
+    return {"success": result}
 
 
 @router.post("/add_history")
@@ -185,9 +209,14 @@ async def add_history(manga_id: int,
                       current_user: User = Depends(get_current_user),
                       user_service: UserService = Depends(
                           Provide[Container.user_service]),
+                      session_iter: AsyncGeneratorType[AsyncSession] = Depends(
+                          get_session)
                       ):
+    session = await session_iter.__anext__()
     _, user_id = current_user
-    return {"success": user_service.add_history(manga_id, user_id)}
+    db_history = await user_service.add_history(session, manga_id, user_id)
+    result = True if db_history else False
+    return {"success": result}
 
 
 @router.delete("/remove_fav")
@@ -196,9 +225,14 @@ async def remove_fav(manga_id: int,
                      current_user: User = Depends(get_current_user),
                      user_service: UserService = Depends(
                          Provide[Container.user_service]),
+                     session_iter: AsyncGeneratorType[AsyncSession] = Depends(
+                         get_session)
                      ):
+    session = await session_iter.__anext__()
     _, user_id = current_user
-    return {"success": user_service.remove_fav(manga_id, user_id)}
+    db_user = await user_service.remove_fav(session, manga_id, user_id)
+    result = True if db_user else False
+    return {"success": result}
 
 
 @router.delete("/remove_history")
@@ -207,9 +241,14 @@ async def remove_history(manga_id: int,
                          current_user: User = Depends(get_current_user),
                          user_service: UserService = Depends(
                              Provide[Container.user_service]),
+                         session_iter: AsyncGeneratorType[AsyncSession] = Depends(
+                             get_session)
                          ):
+    session = await session_iter.__anext__()
     _, user_id = current_user
-    return {"success": user_service.remove_history(manga_id, user_id)}
+    db_history = await user_service.remove_history(session, manga_id, user_id)
+    result = True if db_history else False
+    return {"success": result}
 
 
 @router.put("/update_history")
@@ -217,27 +256,38 @@ async def remove_history(manga_id: int,
 async def update_history(chap_id: int,
                          current_user: User = Depends(get_current_user),
                          user_service: UserService = Depends(
-                             Provide[Container.user_service])):
+                             Provide[Container.user_service]),
+                         session_iter: AsyncGeneratorType[AsyncSession] = Depends(
+                             get_session)):
+    session = await session_iter.__anext__()
     _, user_id = current_user
-    return {"success": user_service.update_history(chap_id, user_id)}
+    result = await user_service.update_history(session, chap_id, user_id)
+    return {"success": result}
 
 
 @router.delete("/all")
 @inject
 async def delete_all_data(database: Database = Depends(Provide[Container.db])):
-    with database.session() as session:
-        delete_all(session)
+    async with database.session() as session:
+        async with session.begin():
+            await delete_all(session)
+            await session.commit()
+
+    async with database.session() as session:
+        async with session.begin():
+            await delete_dependent_tables(session)
+            await session.commit()
     return {"success": 200}
 
 
 @router.post("/init")
 @inject
 async def init_data(database: Database = Depends(Provide[Container.db])):
-    with database.session() as session:
-        site = MangaSite(name="manhuaren", url="https://www.manhuaren.com")
-        session.add(site)
-        site = MangaSite(name="anime1", url="https://anime1.me/")
-        session.add(site)
-        session.commit()
+    async with database.session() as session:
+        async with session.begin():
+            session.add(MangaSite(name="manhuaren",
+                        url="https://www.manhuaren.com"))
+            session.add(MangaSite(name="anime1", url="https://anime1.me/"))
+            await session.commit()
 
     return {"success": 200}

@@ -1,6 +1,8 @@
 import pytest
 import asyncio
 from webapp.containers import Container
+from dependency_injector import providers
+from webapp.services.database import Database
 
 
 @pytest.fixture(scope="session")
