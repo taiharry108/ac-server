@@ -1,0 +1,45 @@
+<div *ngIf="manga">
+  <div class="bg-blue-600 w-full md:h-96 h-[500px]">
+    <div class="md:w-3/5 max-w-[65%] flex md:flex-row flex-col p-10 m-auto">
+      <div class="w-48">
+        <img [src]="manga.thum_img">
+      </div>
+      <div class="grow ml-5">
+        <h1 class="md:text-5xl text-3xl text-gray-100">{{ manga.name }}</h1>
+        <div class="m-2">
+          <app-bookmark-icon [isFav]="isFav(manga.id)" (click)="onFavIconClicked(manga.id)">
+          </app-bookmark-icon>
+        </div>
+        <hr class="my-4" />
+        <p class="text-base text-gray-100 m-2">Last Update: {{ manga.last_update }}</p>
+        <p class="text-base text-gray-100 m-2">Status: {{ manga.finished ? 'Finished' : 'Ongoing' }}</p>
+        <p *ngIf="latestChap$ | async as latestChap" class="text-base text-gray-100 m-2">Last Read Chapter: {{
+          latestChap.title }}</p>
+      </div>
+    </div>
+  </div>
+
+  <app-tabs [tabNames]="tabNames" [maxWidth]="65" (tabActivateEvent)="onTabLinkClicked($event)"></app-tabs>
+  <div class="m-auto max-w-[65%] bg-white">
+    <div class="index-table grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+      <div class="text-center m-3 p-3 hover:bg-gray-100 rounded-lg" (click)="onChapterClick(idx)"
+        data-bs-toggle="modal" data-bs-target="#exampleModalLong"
+        *ngFor="let chapter of manga.chapters[tabNames[activatedTab]]; let idx = index">
+        <a class="p-3">{{
+          chapter.title }}</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade fixed top-0 left-0 hidden w-full h-full outline-none overflow-x-hidden overflow-y-auto"
+  id="exampleModalLong" tabindex="-1" aria-labelledby="exampleModalLongLabel" aria-hidden="true" (keydown.arrowleft)="onLeftDown()" (keydown.arrowright)="onRightDown()">
+  <div class="modal-dialog relative w-auto max-w-fit pointer-events-none">
+    <div
+      class="modal-content border-none shadow-lg relative flex flex-col w-full pointer-events-auto bg-white bg-clip-padding rounded-md outline-none text-current">
+      <div class="modal-body">
+        <app-view-panel></app-view-panel>
+      </div>
+    </div>
+  </div>
+</div>

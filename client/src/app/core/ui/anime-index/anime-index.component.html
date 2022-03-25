@@ -1,0 +1,41 @@
+<div *ngIf="anime">
+  <div class="bg-blue-600 w-full h-96">
+    <div class="md:w-3/5 max-w-[65%] flex flex-row p-10 m-auto">
+      <div class="grow ml-5">
+        <h1 class="md:text-5xl text-3xl text-gray-100">{{ anime.name }}</h1>
+        <div class="m-2">
+          <!-- <app-bookmark-icon [isFav]="isFav(manga.id)" (click)="onFavIconClicked(manga.id)">
+          </app-bookmark-icon> -->
+        </div>
+        <hr class="my-4" />
+        <p class="text-base text-gray-100 m-2">Last Update: </p>
+        <p class="text-base text-gray-100 m-2">Status: </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-auto max-w-[65%] bg-white">
+    <div class="index-table grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+      <div class="text-center m-3 p-3 hover:bg-gray-100 rounded-lg" data-bs-toggle="modal"
+        (click)="onEpisode(episode.id)" data-bs-target="#exampleModalLong"
+        *ngFor="let episode of episodes$ | async; let idx = index">
+        <a class="p-3">{{
+          episode.title }}</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade fixed top-0 left-0 hidden w-full h-full outline-none overflow-x-hidden overflow-y-auto"
+  id="exampleModalLong" tabindex="-1" aria-labelledby="exampleModalLongLabel" aria-hidden="true">
+  <div class="modal-dialog relative w-auto max-w-fit pointer-events-none">
+    <div
+      class="modal-content border-none shadow-lg relative flex flex-col w-full pointer-events-auto bg-white bg-clip-padding rounded-md outline-none text-current">
+      <div class="modal-body w-[960px]">
+        <video controls autoplay class="embed-responsive embed-responsive-16by9 relative w-full overflow-hidden"
+          [src]="vidPath" type="video/mp4">
+        </video>
+      </div>
+    </div>
+  </div>
+</div>

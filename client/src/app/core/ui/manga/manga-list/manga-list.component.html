@@ -1,0 +1,23 @@
+<div class="container m-auto">
+  <div class="w-full">
+    <h1 class="text-2xl text-center m-2">{{ title }}</h1>
+  </div>
+  <div class="w-full">
+    <div class="row list-row grid grid-cols-1 lg:grid-cols-3 md:grid-cols-2 overflow-clip flex-wrap">
+      <a class="flex flex-row items-center h-72 m-2 bg-white rounded-lg border shadow-md  overflow-hidden hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 "
+        *ngFor="let manga of mangas" (click)="onCardClicked(manga.id)">
+        <img class="object-cover h-full w-56 max-w-4xl" [src]="manga.thum_img" alt="">
+
+        <div class=" flex flex-col justify-between p-4 leading-normal">
+          <h5 class="mb-2 text-2xl font-bold tracking-tight text-gray-900 dark:text-white">{{manga.name}}</h5>
+          <app-bookmark-icon [isFav]="manga.is_fav" (click)="onFavIconClicked($event, manga.id)">
+          </app-bookmark-icon>
+          <p class="font-normal text-gray-700 dark:text-gray-400">Latest Update: {{ manga.last_update | date }}</p>
+          <p class="font-normal text-gray-700 dark:text-gray-400">Status: {{ manga.finished ? "Finished" :
+            "Ongoing" }}</p>
+          <p *ngIf="manga.latest_chapter" class="font-normal text-gray-700 dark:text-gray-400">Last Read Chapter: {{ manga.latest_chapter?.title }}
+        </div>
+      </a>
+    </div>
+  </div>
+</div>
