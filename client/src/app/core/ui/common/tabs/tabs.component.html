@@ -1,0 +1,10 @@
+<ul
+  class="m-auto nav nav-tabs nav-justified flex flex-col md:flex-row flex-wrap list-none border-b-0 pl-0 bg-white"
+  [ngClass]="maxWidthClass"  id="tabs-tabJustify" role="tablist">
+  <li *ngFor="let item of tabNames; let idx = index" class="nav-item flex-grow text-center" role="presentation"
+    (click)="onTabLinkClicked(idx)">
+    <a class=" nav-link w-full block font-medium text-xs leading-tight uppercase border-x-0 border-t-0 border-b-2 border-transparent px-6 py-3 my-2 hover:border-transparent hover:bg-gray-100 focus:border-transparent"
+      [ngClass]="idx == this.activatedTab ? 'active' : ''">{{ item
+      }}</a>
+  </li>
+</ul>
