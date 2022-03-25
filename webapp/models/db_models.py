@@ -12,7 +12,6 @@ favorite_table = Table('favorite', Base.metadata,
                               'mangas.id'))
                        )
 
-
 class History(Base):
     __tablename__ = 'history'
     user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
