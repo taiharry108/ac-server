@@ -55,6 +55,7 @@ def stream_resp(method: str = "GET"):
                 "follow_redirects") if "follow_redirects" in kwargs else False
             data = kwargs.pop("data") if "data" in kwargs else {}
             if "headers" in kwargs:
+                logger.info("headers exists")
                 headers.update(kwargs.pop("headers"))
 
             logger.info(f"going to send a {method} request to {url}")
@@ -85,6 +86,7 @@ class DownloadService:
         limits = Limits(max_connections=max_connections,
                         max_keepalive_connections=max_keepalive_connections)
         logger.info(proxy)
+        # proxies = f"socks5://{proxy['username']}:{proxy['password']}@{proxy['server']}:{proxy['port']}"
         self.client = AsyncClient(
             limits=limits, timeout=5, verify=False)
 

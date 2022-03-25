@@ -10,3 +10,13 @@ def event_loop(request):
     c = Container()
     yield loop
     loop.close()
+
+
+@pytest.fixture(autouse=True, scope="module")
+async def database():
+    container = Container()
+    container.db.override(providers.Singleton(
+        Database, db_url="postgresql+asyncpg://taiharry:123456@postgres/testAcDB"))
+    db = container.db()
+    await db.create_database()
+    return db

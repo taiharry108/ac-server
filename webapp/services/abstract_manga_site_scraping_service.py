@@ -57,7 +57,7 @@ class AbstractMangaSiteScrapingService(metaclass=abc.ABCMeta):
         } for idx, img_url in enumerate(img_urls)]
 
         async for result_dict in self.async_service.work(
-                work_list, self.download_service.download_img, download_path=download_path):
+                work_list, self.download_service.download_img, download_path=download_path, headers={"Referer": chapter.page_url}):
             yield result_dict
         
 

@@ -28,7 +28,7 @@ def create_app() -> FastAPI:
     container = Container()
     
     db = container.db()
-    db.create_database()
+    # db.create_database()
 
     app = FastAPI(on_startup=[on_start_up], on_shutdown=[on_shutdown])
 
