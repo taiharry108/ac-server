@@ -6,7 +6,7 @@ export const environment = {
   production: false,
   serverUrl: "http://192.168.0.39:60888/api/",
   userApiUrl: "http://192.168.0.39:60888/user/",
-  mediaServerUrl: "https://ac-server-content.s3.us-west-1.amazonaws.com/"
+  mediaServerUrl: "http://192.168.0.39:8001/"
 };
 
 /*

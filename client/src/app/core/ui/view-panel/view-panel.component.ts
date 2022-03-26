@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 import { Subject, takeUntil } from 'rxjs';
 import { MangaApiService } from 'src/app/manga-api.service';
@@ -13,6 +13,8 @@ import { FakeItemService } from '../../fake-item.service';
 export class ViewPanelComponent implements OnInit, OnDestroy {
   pages: SafeUrl[] = [];
   ngUnsubscribe = new Subject<void>();
+  @Output() clickLeft = new EventEmitter<void>();
+  @Output() clickRight = new EventEmitter<void>();
 
   constructor(private mangaApi: MangaApiService, private fakeItemService: FakeItemService, private cd: ChangeDetectorRef, private sanitizer: DomSanitizer,) {
 
@@ -46,5 +48,21 @@ export class ViewPanelComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.ngUnsubscribe.next();
     this.ngUnsubscribe.complete();
+  }
+
+  onImageContainerClick(event: MouseEvent): void {
+    const imageCtnr = document.getElementById('image-container');
+    const width = imageCtnr?.clientWidth;
+    if (width) {
+      const half = width / 2;
+      if (event.offsetX > half)
+        this.clickRight.emit();
+      else
+        this.clickLeft.emit();
+    }
+    
+
+    
+    console.log(`offsetX,Y=(${event.offsetX}, ${event.offsetY})`);
   }
 }

@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { Observable, Subject, takeUntil } from 'rxjs';
 import { MangaApiService } from 'src/app/manga-api.service';
 import { Chapter } from 'src/app/models/chapter';
@@ -14,6 +14,7 @@ export class IndexComponent implements OnInit, OnDestroy {
 
   manga: Manga;
   ngUnsubscribe = new Subject<void>();
+  viewHidden = true;
 
   manga$: Observable<Manga>;
   latestChap$: Observable<Chapter>;
@@ -21,7 +22,7 @@ export class IndexComponent implements OnInit, OnDestroy {
   MangaIndexType = MangaIndexType;
   chapIdx: number = 0;
 
-  constructor(private mangaApi: MangaApiService, private userApi: UserApiService) {
+  constructor(private mangaApi: MangaApiService, private userApi: UserApiService, private cd: ChangeDetectorRef) {
     this.manga$ = mangaApi.mangaWithIndexSubject;
     this.latestChap$ = userApi.latestChapSubject;
     this.manga = {} as Manga;
@@ -40,7 +41,10 @@ export class IndexComponent implements OnInit, OnDestroy {
     const chapters: Chapter[] = this.manga.chapters[
       MangaIndexType[this.activatedTab]
     ];
-    if (this.chapIdx > 0) this.getImages(this.chapIdx - 1);
+
+    if (this.chapIdx > 0) {
+      this.getImages(this.chapIdx - 1);
+    }
     console.log('pressed left');
   }
 
@@ -48,7 +52,10 @@ export class IndexComponent implements OnInit, OnDestroy {
     const chapters: Chapter[] = this.manga.chapters[
       MangaIndexType[this.activatedTab]
     ];
-    if (this.chapIdx < chapters.length - 1) this.getImages(this.chapIdx + 1);
+
+    if (this.chapIdx < chapters.length - 1) {
+      this.getImages(this.chapIdx + 1);
+    }
 
     console.log('pressed right');
   }
@@ -83,17 +90,36 @@ export class IndexComponent implements OnInit, OnDestroy {
       MangaIndexType[this.activatedTab]
     ];
     const chapter = chapters[chapIdx];
+    console.log(this.manga);
     this.mangaApi.getImages(chapter.id);
-    this.userApi.updateLastRead(chapter.id);
+    this.userApi.updateLastRead(chapter.id, this.manga.id);
     this.chapIdx = chapIdx;
   }
 
   onChapterClick(chapIdx: number) {
     this.getImages(chapIdx);
+    this.viewHidden = false;
+  }
+  onStopClicked() {
+    this.mangaApi.sseService.cancelCurrentSource();
   }
 
   ngOnDestroy(): void {
     this.ngUnsubscribe.next();
+  }
+
+  onLatestChapterClick(chapterId: number): void {
+    const keys = Object.keys(this.manga.chapters);
+    const filteredKeys = keys.filter(key => {
+      return this.manga.chapters[key].filter(chap => chap.id == chapterId).length != 0;
+    })
+    if (filteredKeys.length == 0) return;
+    const idx = this.manga.chapters[filteredKeys[0]].findIndex(chap => chap.id == chapterId);
+    this.getImages(idx);
+  }
+
+  onReverseClick(): void {
+    this.manga.chapters[MangaIndexType[this.activatedTab]] = this.manga.chapters[MangaIndexType[this.activatedTab]].reverse();
   }
 }
 

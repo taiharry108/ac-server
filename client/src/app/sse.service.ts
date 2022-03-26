@@ -8,32 +8,26 @@ import { Page } from './models/page';
 export class SseService {
   dataSubject = new Subject<any>();
 
-  private cancelledSet = new Set();
-  private currentUrl = "";
+  private currentSource: EventSource | null = null;
 
   public cancelCurrentSource(): void {
-    this.cancelledSet.add(this.currentUrl);
+    this.currentSource?.close();
+    this.currentSource = null;
   }
 
   startServerSentEvent(url: string): void {
-    this.currentUrl = url;
-    const eventSource = this.getEventSource(url);
-    eventSource.onmessage = event => {
-      const data = JSON.parse(event.data);
-      console.log(this.cancelledSet);
-      if (this.cancelledSet.has(eventSource.url)) {
-        eventSource.close();
-        this.cancelledSet.delete(eventSource.url);
-      }
-
-      console.log(eventSource.url);
+    this.currentSource = this.getEventSource(url);
+    this.currentSource.onmessage = event => {
+      const data = JSON.parse(event.data);      
       if (event.data !== "{}")
         this.dataSubject.next(data);
-      else
-        eventSource.close();
+      else {
+        this.currentSource?.close();
+        this.currentSource = null;
+      }
     }
 
-    eventSource.onerror = error => {
+    this.currentSource.onerror = error => {
       console.log(error);
       this.dataSubject.error(error);
     }

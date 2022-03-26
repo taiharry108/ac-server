@@ -106,7 +106,7 @@ export class UserApiService {
       );
   }
 
-  updateLastRead(chapId: number) {
+  updateLastRead(chapId: number, mangaId: number) {
     const url = `${this.userApiUrl}update_history`;
     this.http.put(url, null,
       {
@@ -115,7 +115,10 @@ export class UserApiService {
         },
         params: new HttpParams().set("chap_id", chapId)
       }).subscribe(
-        (response) => console.log(response)
+        (response) => {
+          this.getLastRead(mangaId);
+          console.log(response);
+        }
       );
   }
 

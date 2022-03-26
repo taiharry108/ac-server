@@ -23,7 +23,6 @@ export class MangaApiService {
 
   pagesSubject = new Subject<Page[]>();
   imagesSseEvent = new Subject<Page>();
-  sseServiceSub: Subscription | null = null;
   unsubSSE = new Subject<void>();
 
   currentAnime: Anime | null = null;
@@ -31,7 +30,11 @@ export class MangaApiService {
   episodePathSubject = new Subject<string>();
 
 
-  constructor(private http: HttpClient, private sseService: SseService) { }
+  constructor(private http: HttpClient, public sseService: SseService) { 
+    this.sseService.dataSubject.pipe(takeUntil(this.unsubSSE)).subscribe((page) => {
+      this.imagesSseEvent.next(page);
+    });
+  }
 
   serverUrl: string = environment.serverUrl;
 
@@ -88,18 +91,11 @@ export class MangaApiService {
   }
 
   getImages(chapterId: number): void {
+    console.log(`getImages ${chapterId}`);
+    this.sseService.cancelCurrentSource();
     const siteStr = getSiteStr(this.site);
     const url = `${this.serverUrl}chapter/${siteStr}/${chapterId}`;
-
-    if (this.sseServiceSub) {
-      this.sseService.cancelCurrentSource();
-      this.sseServiceSub.unsubscribe();
-    }
-
-    this.sseService.startServerSentEvent(url)
-    this.sseServiceSub = this.sseService.dataSubject.pipe(takeUntil(this.unsubSSE)).subscribe((page) => {
-      this.imagesSseEvent.next(page);
-    });
+    this.sseService.startServerSentEvent(url)    
   }
 
   getEpisode(episodeId: number) {

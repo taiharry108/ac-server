@@ -1,0 +1,37 @@
+version: '3.7'
+
+services:
+  web:
+    build:
+      context: ./
+      dockerfile: dockerfiles/app.dockerfile
+    command: uvicorn webapp.application:app --reload --workers 1 --host 0.0.0.0 --port 8000
+    container_name: ac-server-backend
+    volumes:
+      - ./webapp:/code/webapp
+      - /home/taiharry/web:/static
+    ports:
+      - 60888:8000
+    depends_on:
+      - postgres
+  client:
+    build:
+      context: ./
+      dockerfile: dockerfiles/client.dockerfile
+    command: npm start
+    container_name: ac-server-frontend
+    volumes:
+      - ./client/src:/usr/src/app/src
+    ports:
+      - 60820:4200
+  postgres:
+    image: postgres
+    restart: always
+    ports:
+      - 5432:5432
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_USER: taiharry
+      POSTGRES_DB: mydb
